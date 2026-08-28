@@ -3,6 +3,8 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
+import { requireAuth, AuthRequest } from './src/middleware/auth.ts';
+import { getOrCreateUser, getUsers } from './src/db/users.ts';
 
 dotenv.config();
 
@@ -10,6 +12,40 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json());
+
+// ----------------------------------------------------
+// Cloud SQL & Auth API Routes
+// ----------------------------------------------------
+app.post('/api/users/sync', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const { email, displayName, role } = req.body;
+    const uid = req.user?.uid;
+    if (!uid) {
+      return res.status(400).json({ error: 'Missing UID from token' });
+    }
+
+    const user = await getOrCreateUser(
+      uid,
+      email || req.user?.email || 'user@example.com',
+      displayName || req.user?.name,
+      role || 'student'
+    );
+    res.json({ success: true, user });
+  } catch (error: any) {
+    console.error('Failed to sync user to Cloud SQL:', error);
+    res.status(500).json({ error: error.message || 'Failed to sync user' });
+  }
+});
+
+app.get('/api/users', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const allUsers = await getUsers();
+    res.json({ success: true, users: allUsers });
+  } catch (error: any) {
+    console.error('Failed to fetch users from Cloud SQL:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch users' });
+  }
+});
 
 // Initialize Gemini Client lazily or gracefully
 function getGeminiClient() {

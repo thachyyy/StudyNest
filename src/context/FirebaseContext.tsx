@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { collection, onSnapshot, doc } from 'firebase/firestore';
 import {
@@ -6,6 +6,7 @@ import {
   db,
   testConnection,
   signInWithGoogle,
+  signInAsDemo,
   logOut,
   seedInitialDataIfEmpty,
   saveMaterialToFirestore,
@@ -27,13 +28,17 @@ import {
 interface FirebaseContextType {
   currentUser: User | null;
   authLoading: boolean;
+  isLoggingIn: boolean;
   isConnected: boolean;
+  authNotice: string | null;
+  clearAuthNotice: () => void;
   materials: Material[];
   students: Student[];
   conversations: StudentConversation[];
   quiz: Quiz;
   analytics: LearningAnalytics;
   loginWithGoogle: () => Promise<void>;
+  loginAsDemo: (role: 'teacher' | 'student') => Promise<void>;
   logout: () => Promise<void>;
   addMaterial: (newMat: Material) => Promise<void>;
   updateStudent: (student: Student) => Promise<void>;
@@ -46,6 +51,8 @@ const FirebaseContext = createContext<FirebaseContextType | null>(null);
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   const [materials, setMaterials] = useState<Material[]>(INITIAL_MATERIALS);
@@ -65,10 +72,31 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
     init();
 
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (isMounted) {
         setCurrentUser(user);
         setAuthLoading(false);
+        setIsLoggingIn(false);
+
+        // Sync authenticated user to Cloud SQL database in backend
+        if (user && !user.isAnonymous) {
+          try {
+            const token = await user.getIdToken();
+            await fetch('/api/users/sync', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                email: user.email,
+                displayName: user.displayName,
+              }),
+            });
+          } catch (e) {
+            console.warn('Background Cloud SQL user sync notice:', e);
+          }
+        }
       }
     });
 
@@ -94,7 +122,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, matPath);
+        console.warn('Materials snapshot notice:', error);
       }
     );
 
@@ -112,7 +140,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, stuPath);
+        console.warn('Students snapshot notice:', error);
       }
     );
 
@@ -130,7 +158,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, convPath);
+        console.warn('Conversations snapshot notice:', error);
       }
     );
 
@@ -147,7 +175,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, quizPath);
+        console.warn('Quizzes snapshot notice:', error);
       }
     );
 
@@ -174,19 +202,46 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }));
   }, [students]);
 
+  const clearAuthNotice = useCallback(() => {
+    setAuthNotice(null);
+  }, []);
+
   const handleLoginWithGoogle = async () => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
+    setAuthNotice(null);
     try {
-      await signInWithGoogle();
+      const user = await signInWithGoogle();
+      if (!user) {
+        // Did not finish or closed popup
+        setAuthNotice('Sign-in cancelled or popup closed. You can also sign in with Instant Demo.');
+      }
+    } catch (err: any) {
+      console.info('Sign-in completed or cancelled.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLoginAsDemo = async (role: 'teacher' | 'student') => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
+    setAuthNotice(null);
+    try {
+      await signInAsDemo(role);
     } catch (err) {
-      console.error(err);
+      console.warn('Demo sign in notice:', err);
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
   const handleLogout = async () => {
     try {
       await logOut();
+      setAuthNotice(null);
     } catch (err) {
-      console.error(err);
+      console.warn('Sign-out notice:', err);
     }
   };
 
@@ -224,13 +279,17 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       value={{
         currentUser,
         authLoading,
+        isLoggingIn,
         isConnected,
+        authNotice,
+        clearAuthNotice,
         materials,
         students,
         conversations,
         quiz,
         analytics,
         loginWithGoogle: handleLoginWithGoogle,
+        loginAsDemo: handleLoginAsDemo,
         logout: handleLogout,
         addMaterial: handleAddMaterial,
         updateStudent: handleUpdateStudent,
