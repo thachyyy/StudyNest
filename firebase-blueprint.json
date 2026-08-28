@@ -1,0 +1,111 @@
+{
+  "entities": {
+    "Material": {
+      "title": "Material",
+      "description": "Learning material and lesson plan with extracted Knowledge Tree and keywords",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique material identifier" },
+        "title": { "type": "string", "description": "Lesson or topic title", "maxLength": 200 },
+        "subject": { "type": "string", "description": "Subject name (e.g. Biology, Chemistry)", "maxLength": 100 },
+        "classGroup": { "type": "string", "description": "Class identifier (e.g. Grade 10A)", "maxLength": 50 },
+        "pastLessonContent": { "type": "string", "description": "Summary of previous lesson text", "maxLength": 10000 },
+        "nextLessonContent": { "type": "string", "description": "Upcoming lesson lecture text", "maxLength": 20000 },
+        "learningGoals": { "type": "array", "description": "List of core learning goals" },
+        "keywords": { "type": "array", "description": "List of extracted keywords with suggested prompts" },
+        "treeNodes": { "type": "array", "description": "Hierarchical Knowledge Tree nodes" },
+        "createdBy": { "type": "string", "description": "UID of teacher who created the material" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of creation" }
+      },
+      "required": ["id", "title", "subject", "classGroup", "nextLessonContent", "createdAt"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student profile, readiness stats, and preparation progress",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique student identifier" },
+        "userId": { "type": "string", "description": "Auth UID if linked" },
+        "name": { "type": "string", "description": "Student full name", "maxLength": 100 },
+        "email": { "type": "string", "description": "Student email address", "maxLength": 150 },
+        "avatarUrl": { "type": "string", "description": "Avatar image URL", "maxLength": 500 },
+        "classGroup": { "type": "string", "description": "Class group ID", "maxLength": 50 },
+        "prepProgressPercent": { "type": "number", "description": "Percentage completion of pre-lesson prep (0-100)" },
+        "prepStatus": { "type": "string", "description": "Preparation status", "enum": ["not_started", "in_progress", "completed"] },
+        "reviewStatus": { "type": "string", "description": "Readiness review indicator", "enum": ["needs_review", "ready"] },
+        "quizScore": { "type": "number", "description": "Latest quiz score percent" },
+        "weakKeywords": { "type": "array", "description": "Keywords identified as requiring review" },
+        "lastActive": { "type": "string", "description": "ISO timestamp of last activity" }
+      },
+      "required": ["id", "name", "email", "classGroup", "prepStatus", "lastActive"]
+    },
+    "StudentConversation": {
+      "title": "StudentConversation",
+      "description": "Student chat interaction logs with AI Tutor including prompt quality evaluations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique conversation ID" },
+        "studentId": { "type": "string", "description": "Student ID" },
+        "studentName": { "type": "string", "description": "Student Name", "maxLength": 100 },
+        "materialId": { "type": "string", "description": "Referenced Material ID" },
+        "messages": { "type": "array", "description": "Array of chat messages" },
+        "overallPromptQualityScore": { "type": "number", "description": "Evaluated prompt quality score 0-100" },
+        "thinkingAnalysis": { "type": "string", "description": "AI analysis of student critical thinking", "maxLength": 2000 },
+        "prepAssessment": { "type": "string", "description": "Assessment of student pre-class readiness", "maxLength": 2000 },
+        "lastUpdated": { "type": "string", "description": "ISO timestamp of latest message" }
+      },
+      "required": ["id", "studentId", "materialId", "messages", "lastUpdated"]
+    },
+    "Quiz": {
+      "title": "Quiz",
+      "description": "Adaptive readiness quiz for a given material",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique quiz ID" },
+        "materialId": { "type": "string", "description": "Linked material ID" },
+        "title": { "type": "string", "description": "Quiz title", "maxLength": 200 },
+        "questions": { "type": "array", "description": "Array of quiz questions" },
+        "createdAt": { "type": "string", "description": "ISO timestamp" }
+      },
+      "required": ["id", "materialId", "title", "questions"]
+    },
+    "QuizSubmission": {
+      "title": "QuizSubmission",
+      "description": "Student submission of quiz answers and calculated score",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique submission ID" },
+        "quizId": { "type": "string", "description": "Referenced Quiz ID" },
+        "materialId": { "type": "string", "description": "Referenced Material ID" },
+        "studentId": { "type": "string", "description": "Student ID" },
+        "studentName": { "type": "string", "description": "Student Name", "maxLength": 100 },
+        "score": { "type": "number", "description": "Final score percent (0-100)" },
+        "answers": { "type": "object", "description": "Submitted answer map" },
+        "submittedAt": { "type": "string", "description": "ISO timestamp of submission" }
+      },
+      "required": ["id", "quizId", "studentId", "score", "submittedAt"]
+    }
+  },
+  "firestore": {
+    "/materials/{materialId}": {
+      "schema": { "$ref": "#/entities/Material" },
+      "description": "Collection of curriculum materials, Knowledge Trees, and keywords"
+    },
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Collection of student learning records and prep readiness"
+    },
+    "/conversations/{conversationId}": {
+      "schema": { "$ref": "#/entities/StudentConversation" },
+      "description": "Collection of student chat logs and AI prompt assessments"
+    },
+    "/quizzes/{quizId}": {
+      "schema": { "$ref": "#/entities/Quiz" },
+      "description": "Collection of adaptive readiness quizzes"
+    },
+    "/quizSubmissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/QuizSubmission" },
+      "description": "Collection of student quiz responses and scores"
+    }
+  }
+}

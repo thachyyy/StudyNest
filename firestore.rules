@@ -1,0 +1,127 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common Helper Functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Material Validation Blueprint
+    function isValidMaterial(data) {
+      return data.id is string && isValidId(data.id) &&
+        data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+        data.subject is string && data.subject.size() > 0 && data.subject.size() <= 100 &&
+        data.classGroup is string && data.classGroup.size() > 0 && data.classGroup.size() <= 50 &&
+        data.nextLessonContent is string && data.nextLessonContent.size() <= 20000 &&
+        (!('pastLessonContent' in data) || (data.pastLessonContent is string && data.pastLessonContent.size() <= 10000)) &&
+        (!('learningGoals' in data) || (data.learningGoals is list && data.learningGoals.size() <= 20)) &&
+        (!('keywords' in data) || (data.keywords is list && data.keywords.size() <= 50)) &&
+        (!('treeNodes' in data) || (data.treeNodes is list && data.treeNodes.size() <= 100)) &&
+        data.createdAt is string && data.createdAt.size() <= 50;
+    }
+
+    // Student Validation Blueprint
+    function isValidStudent(data) {
+      return data.id is string && isValidId(data.id) &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+        data.email is string && data.email.size() > 0 && data.email.size() <= 150 &&
+        data.classGroup is string && data.classGroup.size() > 0 && data.classGroup.size() <= 50 &&
+        data.prepStatus in ['not_started', 'in_progress', 'completed'] &&
+        (!('prepProgressPercent' in data) || (data.prepProgressPercent is number && data.prepProgressPercent >= 0 && data.prepProgressPercent <= 100)) &&
+        (!('reviewStatus' in data) || data.reviewStatus in ['needs_review', 'ready']) &&
+        (!('quizScore' in data) || (data.quizScore is number && data.quizScore >= 0 && data.quizScore <= 100)) &&
+        (!('weakKeywords' in data) || (data.weakKeywords is list && data.weakKeywords.size() <= 30)) &&
+        data.lastActive is string && data.lastActive.size() <= 50;
+    }
+
+    // Conversation Validation Blueprint
+    function isValidConversation(data) {
+      return data.id is string && isValidId(data.id) &&
+        data.studentId is string && isValidId(data.studentId) &&
+        data.materialId is string && isValidId(data.materialId) &&
+        data.messages is list && data.messages.size() <= 100 &&
+        (!('overallPromptQualityScore' in data) || (data.overallPromptQualityScore is number && data.overallPromptQualityScore >= 0 && data.overallPromptQualityScore <= 100)) &&
+        (!('thinkingAnalysis' in data) || (data.thinkingAnalysis is string && data.thinkingAnalysis.size() <= 2000)) &&
+        (!('prepAssessment' in data) || (data.prepAssessment is string && data.prepAssessment.size() <= 2000)) &&
+        data.lastUpdated is string && data.lastUpdated.size() <= 50;
+    }
+
+    // Quiz Validation Blueprint
+    function isValidQuiz(data) {
+      return data.id is string && isValidId(data.id) &&
+        data.materialId is string && isValidId(data.materialId) &&
+        data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+        data.questions is list && data.questions.size() > 0 && data.questions.size() <= 50;
+    }
+
+    // Quiz Submission Validation Blueprint
+    function isValidQuizSubmission(data) {
+      return data.id is string && isValidId(data.id) &&
+        data.quizId is string && isValidId(data.quizId) &&
+        data.studentId is string && isValidId(data.studentId) &&
+        data.score is number && data.score >= 0 && data.score <= 100 &&
+        data.submittedAt is string && data.submittedAt.size() <= 50;
+    }
+
+    // Collections Rules
+
+    // 1. Materials Collection
+    match /materials/{materialId} {
+      allow read: if true; // Publicly readable for students and teachers
+      allow create: if isValidId(materialId) && isValidMaterial(incoming());
+      allow update: if isValidId(materialId) && isValidMaterial(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(materialId);
+    }
+
+    // 2. Students Collection
+    match /students/{studentId} {
+      allow read: if true;
+      allow create: if isValidId(studentId) && isValidStudent(incoming());
+      allow update: if isValidId(studentId) && isValidStudent(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(studentId);
+    }
+
+    // 3. Conversations Collection
+    match /conversations/{conversationId} {
+      allow read: if true;
+      allow create: if isValidId(conversationId) && isValidConversation(incoming());
+      allow update: if isValidId(conversationId) && isValidConversation(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(conversationId);
+    }
+
+    // 4. Quizzes Collection
+    match /quizzes/{quizId} {
+      allow read: if true;
+      allow create: if isValidId(quizId) && isValidQuiz(incoming());
+      allow update: if isValidId(quizId) && isValidQuiz(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(quizId);
+    }
+
+    // 5. Quiz Submissions Collection
+    match /quizSubmissions/{submissionId} {
+      allow read: if true;
+      allow create: if isValidId(submissionId) && isValidQuizSubmission(incoming());
+      allow update: if isValidId(submissionId) && isValidQuizSubmission(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(submissionId);
+    }
+  }
+}

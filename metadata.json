@@ -1,0 +1,6 @@
+{
+  "name": "AI Learning Assistant",
+  "description": "Google-style AI learning platform for teachers to manage materials, track analytics, and assess student prompt thinking, and for students to prepare with Knowledge Trees, AI tutoring, and quizzes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
