@@ -7,7 +7,7 @@ import { CreateClassDTO, UpdateClassDTO } from '../lib/validation.ts';
 import { inMemoryStore, InMemoryClass, generateStoreId } from '../db/inMemoryStore.ts';
 
 export interface ServiceResult<T = any> {
-  status: 200 | 201 | 400 | 401 | 403 | 404 | 409 | 500;
+  status: 200 | 201 | 400 | 401 | 403 | 404 | 409 | 413 | 500;
   data?: T;
   error?: string;
 }

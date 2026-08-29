@@ -48,6 +48,7 @@ interface DomainContextType {
   setSelectedDocumentId: (docId: string | null) => void;
   refreshDocuments: () => Promise<void>;
   createDocument: (input: CreateDocumentInput) => Promise<DocumentDTO>;
+  uploadDocument: (file: File | Blob, metadata?: { title?: string; contentType?: string }) => Promise<DocumentDTO>;
   updateDocument: (docId: string, input: UpdateDocumentInput) => Promise<DocumentDTO>;
   deleteDocument: (docId: string) => Promise<void>;
 }
@@ -326,6 +327,19 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return newDoc;
   }, [selectedTopicId]);
 
+  const uploadDocument = useCallback(async (file: File | Blob, metadata?: { title?: string; contentType?: string }): Promise<DocumentDTO> => {
+    if (!selectedTopicId) {
+      throw new Error('Please select an active topic before uploading a document.');
+    }
+    const newDoc = await documentService.uploadDocument(selectedTopicId, file, metadata);
+    setDocumentsState(prev => ({
+      ...prev,
+      data: [...(prev.data || []), newDoc],
+    }));
+    setSelectedDocumentId(newDoc.id);
+    return newDoc;
+  }, [selectedTopicId]);
+
   const updateDocument = useCallback(async (docId: string, input: UpdateDocumentInput): Promise<DocumentDTO> => {
     const updated = await documentService.updateDocument(docId, input);
     setDocumentsState(prev => ({
@@ -393,6 +407,7 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setSelectedDocumentId,
         refreshDocuments,
         createDocument,
+        uploadDocument,
         updateDocument,
         deleteDocument,
       }}

@@ -11,6 +11,7 @@ import {
 import { CreateDocumentDTO, UpdateDocumentDTO } from '../lib/validation.ts';
 import { ServiceResult } from './class.service.ts';
 import { inMemoryStore, InMemoryDocument, generateStoreId } from '../db/inMemoryStore.ts';
+import { validateUploadedPdf, sanitizeFilename, generateStorageIdentifier } from '../lib/fileValidation.ts';
 
 export class DocumentService {
   /**
@@ -115,6 +116,83 @@ export class DocumentService {
         sourceUrl: dto.sourceUrl || null,
         fileSize: dto.fileSize || null,
         status: dto.status || 'ready',
+        createdBy: user.id,
+        createdAt: now,
+        updatedAt: now,
+      };
+      inMemoryStore.documents.set(newId, newDoc);
+      return { status: 201, data: newDoc };
+    }
+  }
+
+  /**
+   * Validates and prepares document record from uploaded PDF file.
+   * Allowed: Owning teacher, Admin
+   */
+  static async uploadDocumentPdf(
+    topicId: string,
+    file: Express.Multer.File | undefined,
+    user: AuthenticatedUser,
+    customTitle?: string,
+    contentType?: string
+  ): Promise<ServiceResult> {
+    // 1. Authorization: Verify teacher owns class containing topic
+    const topicAuth = await checkTopicModification(user.id, user.role, topicId);
+    if (!topicAuth.allowed) {
+      return { status: topicAuth.status, error: topicAuth.reason };
+    }
+
+    // 2. Strict server-side PDF validation
+    const validation = validateUploadedPdf(file);
+    if (!validation.isValid || !file) {
+      return { status: validation.status || 400, error: validation.error };
+    }
+
+    // 3. Derive and sanitize title
+    let title = customTitle && typeof customTitle === 'string' && customTitle.trim().length > 0
+      ? customTitle.trim()
+      : (validation.sanitizedFilename || file.originalname || 'Document.pdf').replace(/\.pdf$/i, '');
+    
+    if (title.length > 200) {
+      title = title.substring(0, 200);
+    }
+
+    const docContentType = contentType && typeof contentType === 'string' && contentType.trim().length > 0
+      ? contentType.trim()
+      : 'lecture_notes';
+
+    // 4. Initial status: 'draft' (pending future processing phases)
+    const initialStatus = 'draft';
+    const storageIdentifier = generateStorageIdentifier(topicId);
+
+    try {
+      const [created] = await db
+        .insert(documents)
+        .values({
+          topicId,
+          title,
+          content: null,
+          contentType: docContentType,
+          sourceUrl: storageIdentifier,
+          fileSize: file.size,
+          status: initialStatus,
+          createdBy: user.id,
+        })
+        .returning();
+
+      return { status: 201, data: created };
+    } catch (error: any) {
+      const newId = generateStoreId('doc');
+      const now = new Date();
+      const newDoc: InMemoryDocument = {
+        id: newId,
+        topicId,
+        title,
+        content: null,
+        contentType: docContentType,
+        sourceUrl: storageIdentifier,
+        fileSize: file.size,
+        status: initialStatus,
         createdBy: user.id,
         createdAt: now,
         updatedAt: now,

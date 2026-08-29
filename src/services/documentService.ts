@@ -38,6 +38,30 @@ export const documentService = {
   },
 
   /**
+   * Uploads a PDF document under a topic with multipart/form-data.
+   */
+  async uploadDocument(
+    topicId: string,
+    file: File | Blob,
+    metadata?: { title?: string; contentType?: string }
+  ): Promise<DocumentDTO> {
+    const formData = new FormData();
+    formData.append('file', file, (file as File).name || 'document.pdf');
+    if (metadata?.title) {
+      formData.append('title', metadata.title);
+    }
+    if (metadata?.contentType) {
+      formData.append('contentType', metadata.contentType);
+    }
+
+    const response = await apiClient.post<{ success: boolean; document: DocumentDTO }>(
+      `/topics/${topicId}/documents`,
+      formData
+    );
+    return response.document;
+  },
+
+  /**
    * Updates document metadata.
    */
   async updateDocument(documentId: string, input: UpdateDocumentInput): Promise<DocumentDTO> {

@@ -37,6 +37,7 @@ export const GoogleHeader: React.FC<GoogleHeaderProps> = ({
     authoritativeRole,
     loginWithGoogle,
     loginAsDemo,
+    switchUserRole,
     logout,
     isConnected,
     isLoggingIn,
@@ -264,43 +265,96 @@ export const GoogleHeader: React.FC<GoogleHeaderProps> = ({
 
                     <div className="py-1">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 block mb-1">
-                        Switch Identity
+                        {currentUser ? 'Change Your Role' : 'Switch Identity'}
                       </span>
-                      <button
-                        onClick={() => {
-                          setShowAuthMenu(false);
-                          loginAsDemo('teacher');
-                          onRoleChange('teacher');
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
-                      >
-                        <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Demo Teacher (Dr. Sarah Vance)</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setShowAuthMenu(false);
-                          loginAsDemo('student');
-                          onRoleChange('student');
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
-                      >
-                        <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Demo Student (An Minh)</span>
-                      </button>
+                      {currentUser ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              setShowAuthMenu(false);
+                              switchUserRole('teacher');
+                              onRoleChange('teacher');
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-1.5 text-xs font-semibold rounded-xl transition-colors cursor-pointer ${
+                              serverUser?.role === 'teacher' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                              <span>Teacher Role</span>
+                            </div>
+                            {serverUser?.role === 'teacher' && <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-bold">Active</span>}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowAuthMenu(false);
+                              switchUserRole('student');
+                              onRoleChange('student');
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-1.5 text-xs font-semibold rounded-xl transition-colors cursor-pointer ${
+                              serverUser?.role === 'student' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Student Role</span>
+                            </div>
+                            {serverUser?.role === 'student' && <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold">Active</span>}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => {
+                              setShowAuthMenu(false);
+                              loginAsDemo('teacher');
+                              onRoleChange('teacher');
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Demo Teacher (Dr. Sarah Vance)</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowAuthMenu(false);
+                              loginAsDemo('student');
+                              onRoleChange('student');
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
+                          >
+                            <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Demo Student (An Minh)</span>
+                          </button>
+                        </>
+                      )}
                     </div>
 
                     <div className="border-t border-slate-100 pt-1 mt-1">
-                      <button
-                        onClick={() => {
-                          setShowAuthMenu(false);
-                          loginWithGoogle();
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
-                      >
-                        <LogIn className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Connect Google Account</span>
-                      </button>
+                      {!currentUser ? (
+                        <button
+                          onClick={() => {
+                            setShowAuthMenu(false);
+                            loginWithGoogle();
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
+                        >
+                          <LogIn className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Connect Google Account</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setShowAuthMenu(false);
+                            loginAsDemo('teacher');
+                            onRoleChange('teacher');
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Switch to Demo Environment</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           setShowAuthMenu(false);
