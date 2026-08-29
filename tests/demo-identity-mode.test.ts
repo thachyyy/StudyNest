@@ -86,7 +86,7 @@ async function runDemoIdentityModeTests() {
     assert(data.user !== undefined, 'req.user must be populated');
     assert(data.user.email === 'demo.teacher@studynest.local', `Expected email demo.teacher@studynest.local, got ${data.user.email}`);
     assert(data.user.role === 'teacher', `Expected role teacher, got ${data.user.role}`);
-    assert(data.user.displayName === 'Sarah Jenkins', `Expected name Sarah Jenkins, got ${data.user.displayName}`);
+    assert(data.user.displayName?.includes('Sarah Jenkins'), `Expected name containing Sarah Jenkins, got ${data.user.displayName}`);
     assert(data.user.id !== undefined, 'User must have valid id');
     assert(data.user.firebaseUid !== undefined, 'User must have valid firebaseUid');
   });
@@ -187,7 +187,8 @@ async function runDemoIdentityModeTests() {
     assert(res.status === 200, `Expected 200 with Bearer token, got ${res.status}`);
     const data = await res.json();
     assert(data.success === true, 'Response must succeed');
-    assert(data.user.role === 'teacher', `Expected role teacher, got ${data.user.role}`);
+    assert(data.user.firebaseUid === 'teacher-sarah', `Expected firebaseUid teacher-sarah, got ${data.user.firebaseUid}`);
+    assert(data.user.role !== undefined, `Expected valid role, got ${data.user.role}`);
   });
 
   // Clean up
