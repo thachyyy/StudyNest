@@ -120,6 +120,40 @@ export async function syncUserFromAuth(input: SyncUserInput): Promise<UserRecord
 }
 
 /**
+ * Finds or provisions a demo user in PostgreSQL for DEMO_MODE development.
+ * Queries the database by email; if not present, inserts a new record with the specified role.
+ */
+export async function getOrCreateDemoUser(
+  email: string,
+  defaultRole: UserRole = 'teacher',
+  defaultDisplayName: string = 'Demo User'
+): Promise<UserRecord> {
+  try {
+    const existing = await getUserByEmail(email);
+    if (existing) {
+      return existing;
+    }
+
+    const demoUid = `demo-uid-${email.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    const [created] = await db
+      .insert(users)
+      .values({
+        uid: demoUid,
+        email: email,
+        displayName: defaultDisplayName,
+        photoUrl: null,
+        role: defaultRole,
+      })
+      .returning();
+
+    return created as UserRecord;
+  } catch (error) {
+    console.error('Database getOrCreateDemoUser failed:', error);
+    throw new Error('Failed to retrieve or provision demo user in database.', { cause: error });
+  }
+}
+
+/**
  * Legacy helper maintained for backwards compatibility.
  * Always forwards to syncUserFromAuth to prevent client-side role elevation.
  */

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { adminAuth } from '../lib/firebase-admin.ts';
 import { DecodedIdToken } from 'firebase-admin/auth';
-import { getUserByUid, syncUserFromAuth, UserRole } from '../db/users.ts';
+import { getUserByUid, syncUserFromAuth, getOrCreateDemoUser, UserRole } from '../db/users.ts';
 
 export interface AuthenticatedUser {
   id: string;
@@ -20,18 +20,96 @@ export interface AuthRequest extends Request {
 }
 
 /**
+  * Checks if DEMO_MODE is active.
+  * In production, logs a security warning if enabled.
+  */
+export const isDemoMode = (): boolean => {
+  const enabled = process.env.DEMO_MODE === 'true';
+  if (enabled && process.env.NODE_ENV === 'production') {
+    console.warn(
+      '[SECURITY WARNING] DEMO_MODE is active in a production environment. Disable DEMO_MODE for production deployments.'
+    );
+  }
+  return enabled;
+};
+
+/**
  * Hardened authentication middleware:
- * 1. Reads Bearer token from Authorization header.
- * 2. Verifies token with Firebase Admin.
- * 3. Extracts Firebase UID.
- * 4. Loads the authoritative user record from PostgreSQL (auto-provisioning 'student' if first seen).
- * 5. Attaches authenticated PostgreSQL user data to req.user.
+ * 
+ * 1. DEMO_MODE=true:
+ *    - Bypasses Firebase ID token verification.
+ *    - Looks up or auto-provisions configured demo user in PostgreSQL.
+ *    - Attaches real PostgreSQL demo user to req.user (same shape).
+ *    - Authorization & RBAC checks remain fully active.
+ * 
+ * 2. DEMO_MODE=false (Production):
+ *    - Reads Bearer token from Authorization header.
+ *    - Verifies token with Firebase Admin.
+ *    - Extracts Firebase UID.
+ *    - Loads authoritative user record from PostgreSQL.
+ *    - Attaches authenticated PostgreSQL user data to req.user.
  */
 export const requireAuth = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
 ) => {
+  // ----------------------------------------------------
+  // Branch A: DEMO_MODE=true
+  // ----------------------------------------------------
+  if (isDemoMode()) {
+    try {
+      const demoEmail = process.env.DEMO_USER_EMAIL || 'demo.teacher@studynest.local';
+      const configuredRole = process.env.DEMO_USER_ROLE as UserRole | undefined;
+      const demoRole: UserRole = configuredRole || (demoEmail.includes('student') ? 'student' : 'teacher');
+      const demoDisplayName = process.env.DEMO_USER_NAME || (demoRole === 'teacher' ? 'Demo Teacher' : 'Demo Student');
+
+      let demoUser: any = null;
+      try {
+        demoUser = await getOrCreateDemoUser(demoEmail, demoRole, demoDisplayName);
+      } catch (dbErr) {
+        if (process.env.NODE_ENV === 'test') {
+          // Fallback test user when isolated unit test runs without active PostgreSQL
+          demoUser = {
+            id: `test-id-${demoEmail.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
+            uid: `demo-uid-${demoEmail.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
+            email: demoEmail,
+            role: demoRole,
+            displayName: demoDisplayName,
+            photoUrl: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+        } else {
+          throw dbErr;
+        }
+      }
+
+      if (!demoUser) {
+        return res.status(500).json({ error: 'Demo user could not be retrieved from database' });
+      }
+
+      req.user = {
+        id: demoUser.id,
+        firebaseUid: demoUser.uid,
+        email: demoUser.email,
+        role: demoUser.role as UserRole,
+        displayName: demoUser.displayName,
+        photoUrl: demoUser.photoUrl,
+        createdAt: demoUser.createdAt,
+        updatedAt: demoUser.updatedAt,
+      };
+
+      return next();
+    } catch (err: any) {
+      console.error('Demo authentication error:', err?.message || err);
+      return res.status(500).json({ error: 'Failed to authenticate in demo mode' });
+    }
+  }
+
+  // ----------------------------------------------------
+  // Branch B: DEMO_MODE=false (Standard Firebase Auth)
+  // ----------------------------------------------------
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized: Missing token' });

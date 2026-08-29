@@ -5,6 +5,7 @@ import { apiClient, setCustomTokenProvider, ApiError, getFirebaseToken } from '.
 
 dotenv.config();
 process.env.NODE_ENV = 'test';
+process.env.DEMO_MODE = 'false';
 
 function assert(condition: boolean, message: string = 'Assertion failed') {
   if (!condition) {

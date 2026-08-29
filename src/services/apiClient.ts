@@ -101,9 +101,6 @@ class ApiClient {
         const token = await getFirebaseToken();
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
-        } else {
-          // Protected request attempted while unauthenticated
-          throw new ApiError('Unauthorized: Missing token', 401);
         }
       }
     }
