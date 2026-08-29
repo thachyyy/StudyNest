@@ -1,4 +1,18 @@
+export * from './types/domain.ts';
+
 export type Role = 'teacher' | 'student';
+export type UserRole = 'teacher' | 'student' | 'admin';
+
+export interface ServerUser {
+  id: string;
+  firebaseUid: string;
+  email: string | null;
+  displayName: string | null;
+  photoUrl?: string | null;
+  role: UserRole;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 export interface Keyword {
   id: string;

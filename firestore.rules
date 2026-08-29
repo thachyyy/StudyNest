@@ -86,42 +86,42 @@ service cloud.firestore {
 
     // 1. Materials Collection
     match /materials/{materialId} {
-      allow read: if true; // Publicly readable for students and teachers
-      allow create: if isValidId(materialId) && isValidMaterial(incoming());
-      allow update: if isValidId(materialId) && isValidMaterial(incoming()) && incoming().id == existing().id;
-      allow delete: if isValidId(materialId);
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(materialId) && isValidMaterial(incoming());
+      allow update: if isSignedIn() && isValidId(materialId) && isValidMaterial(incoming()) && incoming().id == existing().id;
+      allow delete: if isSignedIn() && isValidId(materialId);
     }
 
     // 2. Students Collection
     match /students/{studentId} {
-      allow read: if true;
-      allow create: if isValidId(studentId) && isValidStudent(incoming());
-      allow update: if isValidId(studentId) && isValidStudent(incoming()) && incoming().id == existing().id;
-      allow delete: if isValidId(studentId);
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(studentId) && isValidStudent(incoming());
+      allow update: if isSignedIn() && isValidId(studentId) && isValidStudent(incoming()) && incoming().id == existing().id;
+      allow delete: if isSignedIn() && isValidId(studentId);
     }
 
     // 3. Conversations Collection
     match /conversations/{conversationId} {
-      allow read: if true;
-      allow create: if isValidId(conversationId) && isValidConversation(incoming());
-      allow update: if isValidId(conversationId) && isValidConversation(incoming()) && incoming().id == existing().id;
-      allow delete: if isValidId(conversationId);
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(conversationId) && isValidConversation(incoming());
+      allow update: if isSignedIn() && isValidId(conversationId) && isValidConversation(incoming()) && incoming().id == existing().id;
+      allow delete: if isSignedIn() && isValidId(conversationId);
     }
 
     // 4. Quizzes Collection
     match /quizzes/{quizId} {
-      allow read: if true;
-      allow create: if isValidId(quizId) && isValidQuiz(incoming());
-      allow update: if isValidId(quizId) && isValidQuiz(incoming()) && incoming().id == existing().id;
-      allow delete: if isValidId(quizId);
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(quizId) && isValidQuiz(incoming());
+      allow update: if isSignedIn() && isValidId(quizId) && isValidQuiz(incoming()) && incoming().id == existing().id;
+      allow delete: if isSignedIn() && isValidId(quizId);
     }
 
     // 5. Quiz Submissions Collection
     match /quizSubmissions/{submissionId} {
-      allow read: if true;
-      allow create: if isValidId(submissionId) && isValidQuizSubmission(incoming());
-      allow update: if isValidId(submissionId) && isValidQuizSubmission(incoming()) && incoming().id == existing().id;
-      allow delete: if isValidId(submissionId);
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(submissionId) && isValidQuizSubmission(incoming());
+      allow update: if isSignedIn() && isValidId(submissionId) && isValidQuizSubmission(incoming()) && incoming().id == existing().id;
+      allow delete: if isSignedIn() && isValidId(submissionId);
     }
   }
 }

@@ -4,24 +4,17 @@ import * as dotenv from "dotenv";
 // Load environment variables from .env file.
 dotenv.config();
 
-const sqlHost = process.env.SQL_HOST;
-const sqlDbName = process.env.SQL_DB_NAME;
-const user = process.env.SQL_ADMIN_USER;
-const password = process.env.SQL_ADMIN_PASSWORD;
+const sqlHost = process.env.SQL_HOST || process.env.PGHOST || "127.0.0.1";
+const sqlDbName = process.env.SQL_DB_NAME || process.env.PGDATABASE || "study_nest";
+const user = process.env.SQL_ADMIN_USER || process.env.SQL_USER || process.env.PGUSER || "postgres";
+const password = process.env.SQL_ADMIN_PASSWORD || process.env.SQL_PASSWORD || process.env.PGPASSWORD || "";
+const port = process.env.SQL_PORT
+  ? parseInt(process.env.SQL_PORT, 10)
+  : process.env.PGPORT
+  ? parseInt(process.env.PGPORT, 10)
+  : 5432;
 
-if (!sqlHost) {
-  throw new Error("SQL_HOST must be set in environment variables.");
-}
-if (!sqlDbName) {
-  throw new Error("SQL_DB_NAME must be set in environment variables.");
-}
-if (!user) {
-  throw new Error("SQL_ADMIN_USER must be set in environment variables.");
-}
-if (!password) {
-  throw new Error("SQL_ADMIN_PASSWORD must be set in environment variables.");
-}
-console.log(`Using user: ${user} to connect to database.`);
+console.log(`Connecting to database ${sqlDbName} on ${sqlHost}:${port} as ${user}`);
 
 export default defineConfig({
   schema: "./src/db/schema.ts",
@@ -30,10 +23,12 @@ export default defineConfig({
   schemaFilter: ["public"],
   dbCredentials: {
     host: sqlHost,
+    port: port,
     user: user,
     password: password,
     database: sqlDbName,
-    ssl: false, // Typically false when connecting via Cloud SQL Auth Proxy.
+    ssl: false,
   },
-  verbose: true, // Enable verbose output.
+  verbose: true,
 });
+

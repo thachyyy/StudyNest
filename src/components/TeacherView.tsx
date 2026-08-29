@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Material, Student, StudentConversation, LearningAnalytics, Keyword, TreeNode } from '../types';
 import { KnowledgeTree } from './KnowledgeTree';
 import { PromptCoachCard } from './PromptCoachCard';
+import { auth } from '../lib/firebase';
 import {
   BookOpen, Upload, Sparkles, BarChart3, Users, MessageSquare, AlertCircle,
   CheckCircle2, Clock, Plus, ArrowUpRight, TrendingUp, HelpCircle, FileText, Check, Loader2, Search
@@ -34,6 +35,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({
   const [newNextLesson, setNewNextLesson] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [processSuccessMsg, setProcessSuccessMsg] = useState('');
+  const [processErrorMsg, setProcessErrorMsg] = useState('');
 
   // Handle AI Text -> Tree Generation
   const handleGenerateAiContent = async (e: React.FormEvent) => {
@@ -42,11 +44,16 @@ export const TeacherView: React.FC<TeacherViewProps> = ({
 
     setIsAiProcessing(true);
     setProcessSuccessMsg('');
+    setProcessErrorMsg('');
 
     try {
+      const token = await auth.currentUser?.getIdToken();
       const res = await fetch('/api/ai/text-to-tree', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           title: newTitle,
           subject: newSubject,
@@ -56,6 +63,11 @@ export const TeacherView: React.FC<TeacherViewProps> = ({
       });
 
       const data = await res.json();
+      if (!res.ok) {
+        setProcessErrorMsg(data.error || 'Server authorization rejected this action.');
+        return;
+      }
+
       if (data.success && data.data) {
         const generated = data.data;
 
@@ -78,9 +90,12 @@ export const TeacherView: React.FC<TeacherViewProps> = ({
         setNewTitle('');
         setNewPastLesson('');
         setNewNextLesson('');
+      } else {
+        setProcessErrorMsg(data.error || 'Failed to process AI content');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to generate AI content', err);
+      setProcessErrorMsg(err?.message || 'Failed to generate AI content');
     } finally {
       setIsAiProcessing(false);
     }
@@ -403,6 +418,13 @@ export const TeacherView: React.FC<TeacherViewProps> = ({
                 <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-lg flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>{processSuccessMsg}</span>
+                </div>
+              )}
+
+              {processErrorMsg && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-lg flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{processErrorMsg}</span>
                 </div>
               )}
 

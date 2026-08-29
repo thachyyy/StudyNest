@@ -17,7 +17,9 @@ function AppContent() {
     quiz,
     analytics,
     addMaterial,
-    isConnected
+    isConnected,
+    serverUser,
+    authoritativeRole
   } = useFirebase();
 
   const classList = ['Grade 10A', 'Grade 11B', 'Grade 12 Advanced'];
@@ -35,6 +37,18 @@ function AppContent() {
 
       {/* Main Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Authoritative Role Preview Notice if preview differs from authoritative server role */}
+        {authoritativeRole && authoritativeRole !== activeRole && (
+          <div className="mb-4 px-4 py-2.5 rounded-2xl bg-indigo-50/80 border border-indigo-200/80 text-xs text-indigo-900 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span>
+                <strong>UI Preview Active:</strong> You are previewing the {activeRole === 'teacher' ? 'Teacher' : 'Student'} UI. Your authenticated account role in PostgreSQL is <strong>{authoritativeRole}</strong>. Backend API authorization is strictly enforced by your PostgreSQL role.
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Banner Alert describing Google Edu AI Capabilities & Firebase Status */}
         <div className="mb-8 p-6 rounded-3xl bg-white border border-slate-100 shadow-sm hover:shadow-md transition-shadow flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">

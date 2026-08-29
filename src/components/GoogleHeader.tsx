@@ -34,6 +34,8 @@ export const GoogleHeader: React.FC<GoogleHeaderProps> = ({
 }) => {
   const {
     currentUser,
+    serverUser,
+    authoritativeRole,
     loginWithGoogle,
     loginAsDemo,
     logout,
@@ -97,31 +99,36 @@ export const GoogleHeader: React.FC<GoogleHeaderProps> = ({
             </div>
           </div>
 
-          {/* Role Switcher Pills */}
-          <div className="bg-slate-100/80 p-1 rounded-full border border-slate-200/60 flex items-center">
-            <button
-              onClick={() => onRoleChange('teacher')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
-                activeRole === 'teacher'
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Teacher</span>
-            </button>
+          {/* Role Switcher Pills (UI Preview Mode) */}
+          <div className="flex items-center gap-1.5">
+            <span className="hidden xl:inline text-[11px] font-semibold text-slate-400">
+              View Mode:
+            </span>
+            <div className="bg-slate-100/80 p-1 rounded-full border border-slate-200/60 flex items-center" title="UI View Preview - Backend authorization is strictly enforced by PostgreSQL role">
+              <button
+                onClick={() => onRoleChange('teacher')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
+                  activeRole === 'teacher'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Teacher</span>
+              </button>
 
-            <button
-              onClick={() => onRoleChange('student')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
-                activeRole === 'student'
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <GraduationCap className="w-3.5 h-3.5" />
-              <span>Student</span>
-            </button>
+              <button
+                onClick={() => onRoleChange('student')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
+                  activeRole === 'student'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <GraduationCap className="w-3.5 h-3.5" />
+                <span>Student</span>
+              </button>
+            </div>
           </div>
 
           {/* Firebase Google Auth Button or User Profile */}
@@ -143,7 +150,10 @@ export const GoogleHeader: React.FC<GoogleHeaderProps> = ({
                   {currentUser.displayName || currentUser.email || 'Signed User'}
                 </p>
                 <p className="text-[10px] text-emerald-600 font-semibold leading-none mt-1 flex items-center gap-1">
-                  <ShieldCheck className="w-3 h-3" /> Active
+                  <ShieldCheck className="w-3 h-3" />
+                  <span>
+                    {authoritativeRole ? `Role: ${authoritativeRole}` : currentUser.isAnonymous ? 'Demo User' : 'Authenticated'}
+                  </span>
                 </p>
               </div>
               <button

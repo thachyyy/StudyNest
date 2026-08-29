@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Material, Quiz, ChatMessage, Keyword, QuizQuestion } from '../types';
 import { KnowledgeTree } from './KnowledgeTree';
 import { PromptCoachCard } from './PromptCoachCard';
+import { auth } from '../lib/firebase';
 import {
   BookOpen, Sparkles, Send, CheckCircle2, AlertCircle, HelpCircle,
   Lightbulb, RefreshCw, Loader2, ArrowRight, Award, MessageSquare, ListCheck
@@ -53,9 +54,13 @@ export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz
     setIsChatLoading(true);
 
     try {
+      const token = await auth.currentUser?.getIdToken();
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           studentPrompt: promptToSend,
           keyword: activeKeywordFocus,
@@ -94,9 +99,13 @@ export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz
   const handleGenerateNewQuiz = async () => {
     setIsQuizGenerating(true);
     try {
+      const token = await auth.currentUser?.getIdToken();
       const res = await fetch('/api/ai/generate-quiz', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           lessonTitle: selectedMaterial.title,
           keywords: selectedMaterial.keywords,

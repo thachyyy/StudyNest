@@ -16,7 +16,7 @@ import {
   handleFirestoreError,
   OperationType
 } from '../lib/firebase';
-import { Material, Student, StudentConversation, Quiz, LearningAnalytics } from '../types';
+import { Material, Student, StudentConversation, Quiz, LearningAnalytics, ServerUser, UserRole } from '../types';
 import {
   INITIAL_MATERIALS,
   INITIAL_STUDENTS,
@@ -27,11 +27,14 @@ import {
 
 interface FirebaseContextType {
   currentUser: User | null;
+  serverUser: ServerUser | null;
+  authoritativeRole: UserRole | null;
   authLoading: boolean;
   isLoggingIn: boolean;
   isConnected: boolean;
   authNotice: string | null;
   clearAuthNotice: () => void;
+  refreshServerUser: () => Promise<void>;
   materials: Material[];
   students: Student[];
   conversations: StudentConversation[];
@@ -50,6 +53,7 @@ const FirebaseContext = createContext<FirebaseContextType | null>(null);
 
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [serverUser, setServerUser] = useState<ServerUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
@@ -60,6 +64,30 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [conversations, setConversations] = useState<StudentConversation[]>(INITIAL_CONVERSATIONS);
   const [quiz, setQuiz] = useState<Quiz>(INITIAL_QUIZ);
   const [analytics, setAnalytics] = useState<LearningAnalytics>(INITIAL_ANALYTICS);
+
+  // Fetch authoritative user profile from backend
+  const refreshServerUser = useCallback(async () => {
+    if (!auth.currentUser) {
+      setServerUser(null);
+      return;
+    }
+    try {
+      const token = await auth.currentUser.getIdToken();
+      const res = await fetch('/api/users/me', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setServerUser(data.user);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not refresh server user:', err);
+    }
+  }, []);
 
   // Initialize Auth & Connection
   useEffect(() => {
@@ -78,24 +106,33 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setAuthLoading(false);
         setIsLoggingIn(false);
 
-        // Sync authenticated user to Cloud SQL database in backend
-        if (user && !user.isAnonymous) {
-          try {
-            const token = await user.getIdToken();
-            await fetch('/api/users/sync', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                email: user.email,
-                displayName: user.displayName,
-              }),
-            });
-          } catch (e) {
-            console.warn('Background Cloud SQL user sync notice:', e);
+        if (!user) {
+          setServerUser(null);
+          return;
+        }
+
+        // Sync authenticated user to PostgreSQL database in backend
+        try {
+          const token = await user.getIdToken();
+          const syncRes = await fetch('/api/users/sync', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              displayName: user.displayName,
+              photoUrl: user.photoURL,
+            }),
+          });
+          if (syncRes.ok && isMounted) {
+            const syncData = await syncRes.json();
+            if (syncData.user) {
+              setServerUser(syncData.user);
+            }
           }
+        } catch (e) {
+          console.warn('Background PostgreSQL user sync notice:', e);
         }
       }
     });
@@ -278,11 +315,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     <FirebaseContext.Provider
       value={{
         currentUser,
+        serverUser,
+        authoritativeRole: serverUser?.role || null,
         authLoading,
         isLoggingIn,
         isConnected,
         authNotice,
         clearAuthNotice,
+        refreshServerUser,
         materials,
         students,
         conversations,
