@@ -152,31 +152,6 @@ export async function syncUserFromAuth(input: SyncUserInput): Promise<UserRecord
 }
 
 /**
- * Updates a user's role in PostgreSQL or in-memory fallback.
- */
-export async function updateUserRole(userId: string, newRole: UserRole): Promise<UserRecord | null> {
-  try {
-    const [updated] = await db
-      .update(users)
-      .set({
-        role: newRole,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId))
-      .returning();
-    return (updated as UserRecord) || null;
-  } catch (error) {
-    const memUser = inMemoryStore.users.get(userId);
-    if (memUser) {
-      memUser.role = newRole;
-      memUser.updatedAt = new Date();
-      return memUser;
-    }
-    return null;
-  }
-}
-
-/**
  * Finds or provisions a demo user in PostgreSQL for DEMO_MODE development.
  * Queries the database by email; if not present, inserts a new record with the specified role.
  */

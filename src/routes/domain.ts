@@ -1,6 +1,5 @@
 import { Router, Response } from 'express';
 import { requireAuth, requireRole, AuthRequest } from '../middleware/auth.ts';
-import { uploadPdfMiddleware } from '../middleware/upload.ts';
 import { ClassService } from '../services/class.service.ts';
 import { ClassMemberService } from '../services/classMember.service.ts';
 import { TopicService } from '../services/topic.service.ts';
@@ -315,62 +314,21 @@ domainRouter.get('/topics/:topicId/documents', requireAuth, async (req: AuthRequ
 
 /**
  * POST /api/topics/:topicId/documents
- * Creates a document under a topic. Supports both multipart/form-data PDF upload and JSON metadata.
+ * Creates a document under a topic.
  * Allowed: Owning teacher, Admin
  */
-domainRouter.post('/topics/:topicId/documents', requireAuth, uploadPdfMiddleware, async (req: AuthRequest, res: Response) => {
+domainRouter.post('/topics/:topicId/documents', requireAuth, async (req: AuthRequest, res: Response) => {
   const { topicId } = req.params;
   if (!isValidUuid(topicId)) {
     return res.status(400).json({ error: 'Invalid or malformed topic ID (must be a valid UUID)' });
   }
 
-  // If a file is uploaded or request is multipart/form-data
-  const isMultipart = (req.headers['content-type'] || '').includes('multipart/form-data');
-  if (req.file || isMultipart) {
-    const result = await DocumentService.uploadDocumentPdf(
-      topicId,
-      req.file,
-      req.user!,
-      req.body?.title,
-      req.body?.contentType
-    );
-    if (result.error) {
-      return res.status(result.status).json({ error: result.error });
-    }
-    return res.status(result.status).json({ success: true, document: result.data });
-  }
-
-  // Standard JSON creation
   const validation = validateCreateDocument(req.body);
   if (!validation.isValid) {
     return res.status(400).json({ error: validation.errors.join('; ') });
   }
 
   const result = await DocumentService.createDocument(topicId, validation.data!, req.user!);
-  if (result.error) {
-    return res.status(result.status).json({ error: result.error });
-  }
-  return res.status(result.status).json({ success: true, document: result.data });
-});
-
-/**
- * POST /api/topics/:topicId/documents/upload
- * Explicit PDF document upload endpoint.
- * Allowed: Owning teacher, Admin
- */
-domainRouter.post('/topics/:topicId/documents/upload', requireAuth, uploadPdfMiddleware, async (req: AuthRequest, res: Response) => {
-  const { topicId } = req.params;
-  if (!isValidUuid(topicId)) {
-    return res.status(400).json({ error: 'Invalid or malformed topic ID (must be a valid UUID)' });
-  }
-
-  const result = await DocumentService.uploadDocumentPdf(
-    topicId,
-    req.file,
-    req.user!,
-    req.body?.title,
-    req.body?.contentType
-  );
   if (result.error) {
     return res.status(result.status).json({ error: result.error });
   }

@@ -30,12 +30,19 @@ function AppContent() {
     selectedClass,
   } = useDomain();
 
+  const handleRoleChange = async (newRole: Role) => {
+    setActiveRole(newRole);
+    if (!currentUser) {
+      await loginAsDemo(newRole);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
       {/* Header Bar */}
       <GoogleHeader
         activeRole={activeRole}
-        onRoleChange={setActiveRole}
+        onRoleChange={handleRoleChange}
       />
 
       {/* Main Body */}

@@ -3,7 +3,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { requireAuth, requireRole, AuthRequest } from './src/middleware/auth.ts';
-import { syncUserFromAuth, getUsers, updateUserRole } from './src/db/users.ts';
+import { syncUserFromAuth, getUsers } from './src/db/users.ts';
 import { domainRouter } from './src/routes/domain.ts';
 import { aiRouter } from './src/routes/ai.ts';
 
@@ -85,42 +85,6 @@ app.get('/api/users/me', requireAuth, async (req: AuthRequest, res) => {
   } catch (error: any) {
     console.error('Failed to fetch current user profile:', error);
     res.status(500).json({ error: error.message || 'Failed to fetch user profile' });
-  }
-});
-
-// Update current user role (Teacher / Student)
-app.patch('/api/users/me/role', requireAuth, async (req: AuthRequest, res) => {
-  try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Unauthorized: User authentication required' });
-    }
-
-    const { role } = req.body || {};
-    if (role !== 'teacher' && role !== 'student' && role !== 'admin') {
-      return res.status(400).json({ error: 'Invalid role specified. Must be teacher, student, or admin.' });
-    }
-
-    const updatedUser = await updateUserRole(req.user.id, role);
-    if (!updatedUser) {
-      return res.status(404).json({ error: 'User record not found' });
-    }
-
-    res.json({
-      success: true,
-      user: {
-        id: updatedUser.id,
-        firebaseUid: updatedUser.uid,
-        email: updatedUser.email,
-        displayName: updatedUser.displayName,
-        photoUrl: updatedUser.photoUrl,
-        role: updatedUser.role,
-        createdAt: updatedUser.createdAt,
-        updatedAt: updatedUser.updatedAt,
-      },
-    });
-  } catch (error: any) {
-    console.error('Failed to update user role:', error);
-    res.status(500).json({ error: error.message || 'Failed to update user role' });
   }
 });
 

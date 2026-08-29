@@ -25,7 +25,6 @@ interface FirebaseContextType {
   authNotice: string | null;
   clearAuthNotice: () => void;
   refreshServerUser: () => Promise<void>;
-  switchUserRole: (role: 'teacher' | 'student') => Promise<void>;
   materials: Material[];
   students: Student[];
   conversations: StudentConversation[];
@@ -62,9 +61,36 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const data = await apiClient.get<{ success: boolean; user: ServerUser }>('/users/me');
       if (data?.user) {
         setServerUser(data.user);
+      } else {
+        const role = apiClient.getDemoRole() || 'teacher';
+        setServerUser({
+          id: `demo-${role}-id`,
+          uid: `demo-uid-${role}`,
+          email: role === 'teacher' ? 'demo.teacher@studynest.local' : 'an.minh@studynest.local',
+          displayName: role === 'teacher' ? 'Dr. Sarah Vance' : 'An Minh (Student)',
+          photoUrl: role === 'teacher'
+            ? 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=100&q=80'
+            : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80',
+          role,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
       }
     } catch (err) {
-      console.warn('Could not refresh server user profile:', err);
+      // Fallback demo user if network or unauthenticated
+      const role = apiClient.getDemoRole() || 'teacher';
+      setServerUser({
+        id: `demo-${role}-id`,
+        uid: `demo-uid-${role}`,
+        email: role === 'teacher' ? 'demo.teacher@studynest.local' : 'an.minh@studynest.local',
+        displayName: role === 'teacher' ? 'Dr. Sarah Vance' : 'An Minh (Student)',
+        photoUrl: role === 'teacher'
+          ? 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=100&q=80'
+          : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80',
+        role,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
     }
   }, []);
 
@@ -91,14 +117,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setIsLoggingIn(false);
 
       if (!user) {
-        // Fall back to backend demo user when logged out
-        apiClient.setDemoRole('teacher');
+        // Fall back to backend demo user
         await refreshServerUser();
         return;
       }
-
-      // Real user signed in: Disable demo role headers so real Firebase Bearer token is used
-      apiClient.setDemoRole(null);
 
       // Sync authenticated user to PostgreSQL database in backend
       try {
@@ -187,31 +209,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const handleSwitchUserRole = async (role: 'teacher' | 'student') => {
-    if (currentUser) {
-      // Google-authenticated user: Persist role update to PostgreSQL
-      try {
-        const result = await apiClient.patch<{ success: boolean; user: ServerUser }>('/users/me/role', { role });
-        if (result?.user) {
-          setServerUser(result.user);
-        }
-      } catch (err: any) {
-        console.error('Failed to update role in database:', err);
-      }
-    } else {
-      // Demo user: Switch demo role
-      await handleLoginAsDemo(role);
-    }
-  };
-
   const handleLogout = async () => {
     try {
       await logOut();
       setCurrentUser(null);
+      setServerUser(null);
+      apiClient.setDemoRole(null);
       setAuthNotice(null);
-      // Seamlessly restore default demo teacher on logout
-      apiClient.setDemoRole('teacher');
-      await refreshServerUser();
     } catch (err) {
       console.warn('Sign-out notice:', err);
     }
@@ -260,7 +264,6 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         analytics,
         loginWithGoogle: handleLoginWithGoogle,
         loginAsDemo: handleLoginAsDemo,
-        switchUserRole: handleSwitchUserRole,
         logout: handleLogout,
         addMaterial: handleAddMaterial,
         updateStudent: handleUpdateStudent,
