@@ -102,34 +102,69 @@ export async function testConnection(): Promise<boolean> {
   }
 }
 
-// Safe Google Sign-In helper that prevents concurrent popup collisions and catches user cancels gracefully
-export async function signInWithGoogle() {
+export interface SignInResult {
+  success: boolean;
+  user?: any;
+  error?: string;
+  code?: string;
+}
+
+// Safe Google Sign-In helper that catches errors with actionable feedback for iframe environments
+export async function signInWithGoogle(): Promise<SignInResult> {
   if (isAuthPopupPending) {
-    console.warn('Authentication popup is already in progress.');
-    return null;
+    return {
+      success: false,
+      error: 'Sign-in popup is already active. Please check for an open browser window or tab.',
+    };
   }
 
   isAuthPopupPending = true;
   try {
     const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
+    return { success: true, user: result.user };
   } catch (error: any) {
     const errorCode = error?.code || '';
-    // Known non-fatal user interaction cancels / popup collisions
-    if (
-      errorCode === 'auth/cancelled-popup-request' ||
-      errorCode === 'auth/popup-closed-by-user' ||
-      errorCode === 'auth/popup-blocked' ||
-      errorCode === 'auth/user-cancelled'
-    ) {
-      console.info(`Sign-in was closed or cancelled by user (${errorCode}).`);
-      return null;
-    }
+    const errorMsg = error?.message || '';
+    console.warn('Google Sign-In Error details:', errorCode, errorMsg);
 
-    console.warn('Google Sign-In Notice:', error?.message || error);
-    return null;
+    if (errorCode === 'auth/popup-blocked') {
+      return {
+        success: false,
+        code: errorCode,
+        error: 'Pop-up window was blocked by your browser. Because the preview runs in an iframe, please allow pop-ups or open the app in a new tab.',
+      };
+    } else if (errorCode === 'auth/unauthorized-domain') {
+      return {
+        success: false,
+        code: errorCode,
+        error: 'Domain is not authorized in Firebase Authentication. You can sign in using Instant Demo or open in a new tab.',
+      };
+    } else if (errorCode === 'auth/cancelled-popup-request') {
+      return {
+        success: false,
+        code: errorCode,
+        error: 'Previous popup request was replaced or closed.',
+      };
+    } else if (errorCode === 'auth/popup-closed-by-user') {
+      return {
+        success: false,
+        code: errorCode,
+        error: 'Sign-in popup was closed before completing. Because the preview runs inside an iframe sandbox, third-party cookies or popups might be restricted. You can open in a new tab or use Instant Demo.',
+      };
+    } else if (errorCode === 'auth/operation-not-allowed') {
+      return {
+        success: false,
+        code: errorCode,
+        error: 'Google Sign-In provider is disabled in Firebase Console. You can use Instant Demo.',
+      };
+    } else {
+      return {
+        success: false,
+        code: errorCode,
+        error: errorMsg || 'Unable to complete Google sign-in. You can use Instant Demo or open the app in a new tab.',
+      };
+    }
   } finally {
-    // Reset mutex after small timeout to allow Firebase internal state to stabilize
     setTimeout(() => {
       isAuthPopupPending = false;
     }, 400);

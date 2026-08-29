@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Role, Material } from './types';
 import { FirebaseProvider, useFirebase } from './context/FirebaseContext';
+import { DomainProvider, useDomain } from './context/DomainContext';
 import { GoogleHeader } from './components/GoogleHeader';
 import { TeacherView } from './components/TeacherView';
 import { StudentView } from './components/StudentView';
@@ -8,9 +9,10 @@ import { Sparkles, GraduationCap, ShieldCheck, Database } from 'lucide-react';
 
 function AppContent() {
   const [activeRole, setActiveRole] = useState<Role>('teacher');
-  const [selectedClass, setSelectedClass] = useState<string>('Grade 10A');
 
   const {
+    currentUser,
+    authLoading,
     materials,
     students,
     conversations,
@@ -19,10 +21,14 @@ function AppContent() {
     addMaterial,
     isConnected,
     serverUser,
-    authoritativeRole
+    authoritativeRole,
+    loginWithGoogle,
+    loginAsDemo,
   } = useFirebase();
 
-  const classList = ['Grade 10A', 'Grade 11B', 'Grade 12 Advanced'];
+  const {
+    selectedClass,
+  } = useDomain();
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
@@ -30,15 +36,44 @@ function AppContent() {
       <GoogleHeader
         activeRole={activeRole}
         onRoleChange={setActiveRole}
-        selectedClass={selectedClass}
-        onClassChange={setSelectedClass}
-        classList={classList}
       />
 
       {/* Main Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Unauthenticated Guest Banner */}
+        {!authLoading && !currentUser && (
+          <div className="mb-6 px-5 py-3.5 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50/70 border border-blue-200/80 text-xs text-blue-950 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-2.5 flex-1 min-w-[260px]">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse shrink-0"></div>
+              <span>
+                <strong>Welcome to StudyNest!</strong> You are browsing as a guest. Sign in with Google or select an instant demo profile to access and manage live curriculum classes.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => loginWithGoogle()}
+                className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs transition-colors cursor-pointer"
+              >
+                Sign in with Google
+              </button>
+              <button
+                onClick={() => loginAsDemo('teacher')}
+                className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
+              >
+                Demo Teacher
+              </button>
+              <button
+                onClick={() => loginAsDemo('student')}
+                className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
+              >
+                Demo Student
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Authoritative Role Preview Notice if preview differs from authoritative server role */}
-        {authoritativeRole && authoritativeRole !== activeRole && (
+        {currentUser && authoritativeRole && authoritativeRole !== activeRole && (
           <div className="mb-4 px-4 py-2.5 rounded-2xl bg-indigo-50/80 border border-indigo-200/80 text-xs text-indigo-900 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
@@ -49,7 +84,7 @@ function AppContent() {
           </div>
         )}
 
-        {/* Banner Alert describing Google Edu AI Capabilities & Firebase Status */}
+        {/* Banner Alert describing StudyNest Edu AI Capabilities & PostgreSQL Backend */}
         <div className="mb-8 p-6 rounded-3xl bg-white border border-slate-100 shadow-sm hover:shadow-md transition-shadow flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shrink-0">
@@ -57,15 +92,15 @@ function AppContent() {
             </div>
             <div>
               <div className="flex items-center gap-2.5">
-                <h1 className="text-xl font-semibold text-slate-900 tracking-tight">Synapse Edu AI Studio</h1>
+                <h1 className="text-xl font-semibold text-slate-900 tracking-tight">StudyNest Edu AI Studio</h1>
                 <span className="text-[11px] bg-blue-100 text-blue-700 font-bold px-3 py-0.5 rounded-full flex items-center gap-1">
-                  <Database className="w-3 h-3" /> Firebase Firestore
+                  <Database className="w-3 h-3" /> PostgreSQL Connected
                 </span>
               </div>
               <p className="text-sm text-slate-500 mt-1">
                 {activeRole === 'teacher'
-                  ? 'Manage curriculum materials, extract Text → Knowledge Trees, monitor live student readiness analytics with persistent Firestore cloud storage.'
-                  : 'Prepare lessons with interactive Knowledge Trees, research keywords with AI Tutor, and take adaptive readiness quizzes with cloud syncing.'}
+                  ? 'Manage curriculum classes, syllabus topics & documents backed by PostgreSQL, with Gemini AI Knowledge Trees and student readiness tracking.'
+                  : 'Explore enrolled classes, published syllabus topics, study readings, and prepare with interactive AI Tutor and self-test quizzes.'}
               </p>
             </div>
           </div>
@@ -100,17 +135,17 @@ function AppContent() {
       <footer className="bg-white border-t border-slate-100 py-6 mt-12 text-center text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2 font-medium text-slate-600">
-            <span className="text-blue-600 font-bold">Synapse Edu AI</span>
+            <span className="text-blue-600 font-bold">StudyNest Edu AI</span>
             <span>•</span>
-            <span>Intelligent Workspace for Educators & Learners</span>
+            <span>PostgreSQL Domain Services Integration</span>
           </div>
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1.5 text-emerald-600 font-semibold">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              Firestore Active
+              PostgreSQL Services Active
             </span>
             <span>•</span>
-            <span>Powered by Gemini 3.6 Flash & Firebase</span>
+            <span>Powered by Gemini 3.6 Flash & Cloud SQL</span>
           </div>
         </div>
       </footer>
@@ -121,7 +156,9 @@ function AppContent() {
 export default function App() {
   return (
     <FirebaseProvider>
-      <AppContent />
+      <DomainProvider>
+        <AppContent />
+      </DomainProvider>
     </FirebaseProvider>
   );
 }

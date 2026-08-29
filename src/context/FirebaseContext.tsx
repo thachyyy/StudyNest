@@ -17,6 +17,7 @@ import {
   OperationType
 } from '../lib/firebase';
 import { Material, Student, StudentConversation, Quiz, LearningAnalytics, ServerUser, UserRole } from '../types';
+import { apiClient } from '../services/apiClient';
 import {
   INITIAL_MATERIALS,
   INITIAL_STUDENTS,
@@ -72,17 +73,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return;
     }
     try {
-      const token = await auth.currentUser.getIdToken();
-      const res = await fetch('/api/users/me', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.user) {
-          setServerUser(data.user);
-        }
+      const data = await apiClient.get<{ success: boolean; user: ServerUser }>('/users/me');
+      if (data?.user) {
+        setServerUser(data.user);
       }
     } catch (err) {
       console.warn('Could not refresh server user:', err);
@@ -113,23 +106,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         // Sync authenticated user to PostgreSQL database in backend
         try {
-          const token = await user.getIdToken();
-          const syncRes = await fetch('/api/users/sync', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              displayName: user.displayName,
-              photoUrl: user.photoURL,
-            }),
+          const syncData = await apiClient.post<{ success: boolean; user: ServerUser }>('/users/sync', {
+            displayName: user.displayName,
+            photoUrl: user.photoURL,
           });
-          if (syncRes.ok && isMounted) {
-            const syncData = await syncRes.json();
-            if (syncData.user) {
-              setServerUser(syncData.user);
-            }
+          if (syncData?.user && isMounted) {
+            setServerUser(syncData.user);
           }
         } catch (e) {
           console.warn('Background PostgreSQL user sync notice:', e);
@@ -248,13 +230,13 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setIsLoggingIn(true);
     setAuthNotice(null);
     try {
-      const user = await signInWithGoogle();
-      if (!user) {
-        // Did not finish or closed popup
-        setAuthNotice('Sign-in cancelled or popup closed. You can also sign in with Instant Demo.');
+      const res = await signInWithGoogle();
+      if (!res.success && res.error) {
+        setAuthNotice(res.error);
       }
     } catch (err: any) {
-      console.info('Sign-in completed or cancelled.');
+      console.warn('Sign-in failed:', err);
+      setAuthNotice('Google sign-in could not be completed. You can use Instant Demo or open the app in a new tab.');
     } finally {
       setIsLoggingIn(false);
     }

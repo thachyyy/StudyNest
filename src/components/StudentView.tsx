@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Material, Quiz, ChatMessage, Keyword, QuizQuestion } from '../types';
 import { KnowledgeTree } from './KnowledgeTree';
 import { PromptCoachCard } from './PromptCoachCard';
-import { auth } from '../lib/firebase';
+import { StudentTopicExplorer } from './curriculum/StudentTopicExplorer.tsx';
+import { useDomain } from '../context/DomainContext.tsx';
+import { apiClient } from '../services/apiClient';
 import {
   BookOpen, Sparkles, Send, CheckCircle2, AlertCircle, HelpCircle,
-  Lightbulb, RefreshCw, Loader2, ArrowRight, Award, MessageSquare, ListCheck
+  Lightbulb, RefreshCw, Loader2, ArrowRight, Award, MessageSquare, ListCheck,
+  FolderTree, FileText, Layers
 } from 'lucide-react';
 
 interface StudentViewProps {
@@ -14,21 +17,46 @@ interface StudentViewProps {
 }
 
 export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz }) => {
-  const [activeTab, setActiveTab] = useState<'prep' | 'quiz'>('prep');
-  const [selectedMaterial, setSelectedMaterial] = useState<Material>(materials[0]);
+  const [activeTab, setActiveTab] = useState<'curriculum' | 'prep' | 'quiz'>('curriculum');
+  const [selectedMaterial, setSelectedMaterial] = useState<Material>(materials[0] || null);
+
+  const {
+    selectedClass,
+    selectedTopic,
+    documents,
+  } = useDomain();
 
   // Chatbot state
+  const activeTitle = selectedTopic?.title || selectedMaterial?.title || 'DNA Replication & Gene Expression';
+  const activeContext = selectedTopic?.description || selectedMaterial?.nextLessonContent || 'Review the core molecular biology syllabus.';
+
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome-msg',
       sender: 'ai',
-      text: `Hello An Minh! I am your AI Tutor for **${selectedMaterial.title}**. Ask me any questions, or click one of the suggested prompts below to practice asking high-quality prompts!`,
+      text: `Hello! I am your AI Tutor for **${activeTitle}**. Ask me any questions about this topic, or click one of the suggested prompts below to practice asking high-quality prompts!`,
       timestamp: 'Just now'
     }
   ]);
   const [studentInput, setStudentInput] = useState('');
-  const [activeKeywordFocus, setActiveKeywordFocus] = useState<string>(selectedMaterial.keywords[0]?.word || '');
+  const [activeKeywordFocus, setActiveKeywordFocus] = useState<string>(
+    selectedMaterial?.keywords?.[0]?.word || 'DNA Polymerase'
+  );
   const [isChatLoading, setIsChatLoading] = useState(false);
+
+  // Sync welcome message when topic changes
+  useEffect(() => {
+    if (selectedTopic) {
+      setChatMessages([
+        {
+          id: `welcome-${selectedTopic.id}`,
+          sender: 'ai',
+          text: `Welcome to **${selectedTopic.title}**! Ask me questions about this module or practice prompting to test your readiness.`,
+          timestamp: 'Just now'
+        }
+      ]);
+    }
+  }, [selectedTopic?.id]);
 
   // Quiz state
   const [currentQuiz, setCurrentQuiz] = useState<Quiz>(initialQuiz);
@@ -54,22 +82,17 @@ export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz
     setIsChatLoading(true);
 
     try {
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          studentPrompt: promptToSend,
-          keyword: activeKeywordFocus,
-          lessonContext: selectedMaterial.nextLessonContent,
-          chatHistory: chatMessages.slice(-4)
-        })
+      const data = await apiClient.post<{
+        success: boolean;
+        promptEvaluation?: any;
+        aiResponse?: string;
+      }>('/ai/chat', {
+        studentPrompt: promptToSend,
+        keyword: activeKeywordFocus,
+        lessonContext: activeContext,
+        chatHistory: chatMessages.slice(-4)
       });
 
-      const data = await res.json();
       if (data.success) {
         // Update user message with prompt evaluation
         if (data.promptEvaluation) {
@@ -99,22 +122,16 @@ export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz
   const handleGenerateNewQuiz = async () => {
     setIsQuizGenerating(true);
     try {
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/ai/generate-quiz', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          lessonTitle: selectedMaterial.title,
-          keywords: selectedMaterial.keywords,
-          materialId: selectedMaterial.id,
-          questionCount: 3
-        })
+      const data = await apiClient.post<{
+        success: boolean;
+        quiz?: Quiz;
+      }>('/ai/generate-quiz', {
+        lessonTitle: activeTitle,
+        keywords: selectedMaterial?.keywords || [],
+        materialId: selectedMaterial?.id || 'demo-mat',
+        questionCount: 3
       });
 
-      const data = await res.json();
       if (data.success && data.quiz) {
         setCurrentQuiz(data.quiz);
         setQuizAnswers({});
@@ -146,49 +163,67 @@ export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz
       <div className="bg-white rounded-xl border border-gray-200 p-2 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-lg">
           <button
-            onClick={() => setActiveTab('prep')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-semibold transition-all ${
-              activeTab === 'prep'
+            onClick={() => setActiveTab('curriculum')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'curriculum'
                 ? 'bg-white text-blue-700 shadow-xs font-bold'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
             <BookOpen className="w-4 h-4 text-blue-600" />
-            <span>1. Chuẩn Bị Bài (Lesson Prep & Tree)</span>
+            <span>1. Syllabus & Topics (PostgreSQL)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('prep')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'prep'
+                ? 'bg-white text-blue-700 shadow-xs font-bold'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-purple-600" />
+            <span>2. AI Study Assistant & Tree</span>
           </button>
 
           <button
             onClick={() => setActiveTab('quiz')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-semibold transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
               activeTab === 'quiz'
                 ? 'bg-white text-blue-700 shadow-xs font-bold'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
             <ListCheck className="w-4 h-4 text-emerald-600" />
-            <span>2. Ôn Bài & làm Quiz</span>
+            <span>3. Ôn Bài & làm Quiz</span>
           </button>
         </div>
 
-        {/* Material Selection Pills */}
-        <div className="flex items-center gap-2 pr-2">
-          <span className="text-xs font-semibold text-gray-500">Lesson:</span>
-          <select
-            value={selectedMaterial.id}
-            onChange={(e) => {
-              const mat = materials.find(m => m.id === e.target.value);
-              if (mat) setSelectedMaterial(mat);
-            }}
-            className="bg-white border border-gray-300 text-gray-800 text-xs font-bold py-1.5 px-3 rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {materials.map(m => (
-              <option key={m.id} value={m.id}>{m.title}</option>
-            ))}
-          </select>
+        {/* Active Class & Topic Indicator */}
+        <div className="flex items-center gap-2 pr-2 text-xs">
+          {selectedClass && (
+            <span className="font-bold text-slate-700 bg-slate-100 px-3 py-1 rounded-full">
+              {selectedClass.name}
+            </span>
+          )}
+          {selectedTopic && (
+            <span className="font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full">
+              Topic: {selectedTopic.title}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* TAB 1: PREPARATION & KNOWLEDGE TREE & CHAT */}
+      {/* TAB 1: CURRICULUM & TOPICS EXPLORER (PostgreSQL real backend) */}
+      {activeTab === 'curriculum' && (
+        <StudentTopicExplorer
+          onTopicSelectedForStudy={(topic) => {
+            setActiveKeywordFocus(topic.title);
+          }}
+        />
+      )}
+
+      {/* TAB 2: PREPARATION & KNOWLEDGE TREE & CHAT */}
       {activeTab === 'prep' && (
         <div className="space-y-6">
           {/* Lesson Goals & Reading Material */}
@@ -196,30 +231,34 @@ export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz
             <div className="lg:col-span-8 google-card p-5 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-gray-200">
                 <div>
-                  <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">{selectedMaterial.subject}</span>
-                  <h2 className="text-lg font-bold text-gray-900 mt-0.5">{selectedMaterial.title}</h2>
+                  <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">
+                    {selectedClass?.subject || selectedMaterial?.subject || 'Biology'}
+                  </span>
+                  <h2 className="text-lg font-bold text-gray-900 mt-0.5">{activeTitle}</h2>
                 </div>
                 <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200">
                   Prep Status: Active
                 </span>
               </div>
 
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Learning Objectives</h4>
-                <ul className="space-y-1.5 text-xs text-gray-700">
-                  {selectedMaterial.learningGoals.map((goal, i) => (
-                    <li key={i} className="flex items-start gap-2 bg-blue-50/50 p-2 rounded-lg border border-blue-100">
-                      <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                      <span>{goal}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {selectedMaterial?.learningGoals && selectedMaterial.learningGoals.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Learning Objectives</h4>
+                  <ul className="space-y-1.5 text-xs text-gray-700">
+                    {selectedMaterial.learningGoals.map((goal, i) => (
+                      <li key={i} className="flex items-start gap-2 bg-blue-50/50 p-2 rounded-lg border border-blue-100">
+                        <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                        <span>{goal}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Upcoming Lesson Notes</h4>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Module Overview / Lesson Notes</h4>
                 <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-800 leading-relaxed font-normal whitespace-pre-line">
-                  {selectedMaterial.nextLessonContent}
+                  {activeContext}
                 </div>
               </div>
             </div>
@@ -231,7 +270,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz
               </h3>
 
               <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
-                {selectedMaterial.keywords.map((kw) => (
+                {(selectedMaterial?.keywords || []).map((kw) => (
                   <div
                     key={kw.id}
                     onClick={() => setActiveKeywordFocus(kw.word)}
@@ -255,7 +294,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz
                         setActiveKeywordFocus(kw.word);
                         handleSendMessage(`Can you explain ${kw.word} with a real-world example?`);
                       }}
-                      className="mt-2 text-[11px] font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 hover:underline"
+                      className="mt-2 text-[11px] font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 hover:underline cursor-pointer"
                     >
                       Research with AI <ArrowRight className="w-3 h-3" />
                     </button>
@@ -266,13 +305,15 @@ export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz
           </div>
 
           {/* Interactive Knowledge Tree */}
-          <KnowledgeTree
-            nodes={selectedMaterial.treeNodes}
-            onSelectKeyword={(kw) => {
-              setActiveKeywordFocus(kw);
-              handleSendMessage(`How does ${kw} connect to the main topic?`);
-            }}
-          />
+          {selectedMaterial?.treeNodes && selectedMaterial.treeNodes.length > 0 && (
+            <KnowledgeTree
+              nodes={selectedMaterial.treeNodes}
+              onSelectKeyword={(kw) => {
+                setActiveKeywordFocus(kw);
+                handleSendMessage(`How does ${kw} connect to the main topic?`);
+              }}
+            />
+          )}
 
           {/* AI Tutor Chatbot Panel with Live Prompt Coaching */}
           <div className="google-card p-5 space-y-4">
@@ -298,48 +339,56 @@ export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz
             <div>
               <span className="text-xs font-semibold text-gray-500 block mb-2">Recommended Prompts for "{activeKeywordFocus}":</span>
               <div className="flex flex-wrap gap-2">
-                {selectedMaterial.keywords
-                  .find(k => k.word === activeKeywordFocus)
-                  ?.suggestedPrompts.map((p, i) => (
-                    <button
-                      key={i}
-                      onClick={() => handleSendMessage(p)}
-                      className="google-chip text-xs hover:bg-blue-50 hover:border-blue-300 transition-colors"
-                    >
-                      <Lightbulb className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                      <span>{p}</span>
-                    </button>
-                  ))}
+                {[
+                  `Why is ${activeKeywordFocus} essential in this biological process?`,
+                  `Compare ${activeKeywordFocus} with similar mechanisms in other organisms.`,
+                  `What happens to cell function if ${activeKeywordFocus} undergoes a mutation?`
+                ].map((prompt, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleSendMessage(prompt)}
+                    className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-full text-left transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Lightbulb className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span>{prompt}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
             {/* Chat Thread Messages */}
-            <div className="bg-gray-50/70 p-4 rounded-xl border border-gray-200 space-y-4 max-h-[400px] overflow-y-auto">
+            <div className="space-y-4 max-h-[420px] overflow-y-auto pr-2">
               {chatMessages.map((msg) => (
                 <div key={msg.id} className="space-y-2">
                   <div
-                    className={`flex gap-3 p-3.5 rounded-2xl text-xs max-w-2xl ${
+                    className={`flex gap-3 p-4 rounded-2xl text-xs ${
                       msg.sender === 'student'
-                        ? 'bg-blue-600 text-white ml-auto rounded-br-xs'
-                        : 'bg-white border border-gray-200 text-gray-800 mr-auto rounded-bl-xs'
+                        ? 'bg-blue-50 border border-blue-200/80 ml-8'
+                        : 'bg-white border border-gray-200 mr-8'
                     }`}
                   >
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className={`font-bold ${msg.sender === 'student' ? 'text-blue-100' : 'text-gray-900'}`}>
-                          {msg.sender === 'student' ? 'You (An Minh)' : 'Google Edu AI Tutor'}
+                    <div
+                      className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-white shrink-0 ${
+                        msg.sender === 'student' ? 'bg-blue-600' : 'bg-emerald-600'
+                      }`}
+                    >
+                      {msg.sender === 'student' ? 'S' : 'AI'}
+                    </div>
+
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-gray-900">
+                          {msg.sender === 'student' ? 'You' : 'Google Edu AI Tutor'}
                         </span>
-                        <span className={`text-[10px] ${msg.sender === 'student' ? 'text-blue-200' : 'text-gray-400'}`}>
-                          {msg.timestamp}
-                        </span>
+                        <span className="text-[10px] text-gray-400">{msg.timestamp}</span>
                       </div>
-                      <p className="leading-relaxed whitespace-pre-line">{msg.text}</p>
+                      <p className="text-gray-800 leading-relaxed whitespace-pre-line">{msg.text}</p>
                     </div>
                   </div>
 
-                  {/* Prompt Coach Evaluation card under user message */}
+                  {/* Prompt Coach Evaluation Box for Student Messages */}
                   {msg.sender === 'student' && msg.promptEvaluation && (
-                    <div className="ml-auto max-w-xl">
+                    <div className="ml-8 max-w-xl">
                       <PromptCoachCard evaluation={msg.promptEvaluation} />
                     </div>
                   )}
@@ -347,168 +396,159 @@ export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz
               ))}
 
               {isChatLoading && (
-                <div className="flex items-center gap-2 text-xs text-blue-600 bg-white p-3 rounded-xl border border-blue-100 w-fit">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>AI Tutor is formulating explanation & evaluating prompt quality...</span>
+                <div className="flex items-center gap-2 p-3 bg-gray-50 text-gray-500 text-xs rounded-xl border border-gray-200 mr-8">
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                  <span>Gemini AI Tutor is synthesizing an explanation and evaluating your prompt...</span>
                 </div>
               )}
             </div>
 
             {/* Chat Input Bar */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSendMessage();
-              }}
-              className="flex items-center gap-2 pt-2"
-            >
+            <div className="pt-3 border-t border-gray-200 flex gap-2">
               <input
                 type="text"
-                placeholder={`Ask AI Tutor about ${activeKeywordFocus || 'this lesson'}...`}
+                placeholder={`Ask a specific question about ${activeKeywordFocus || activeTitle}...`}
                 value={studentInput}
                 onChange={(e) => setStudentInput(e.target.value)}
-                disabled={isChatLoading}
-                className="flex-1 px-4 py-2.5 bg-white border border-gray-300 rounded-full text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
               />
               <button
-                type="submit"
+                onClick={() => handleSendMessage()}
                 disabled={!studentInput.trim() || isChatLoading}
-                className="google-btn-primary flex items-center gap-1.5 px-5 text-xs py-2.5 disabled:opacity-50"
+                className="google-btn-primary px-5 py-2.5 flex items-center gap-1.5 text-xs disabled:opacity-50 cursor-pointer"
               >
                 <span>Send</span>
                 <Send className="w-3.5 h-3.5" />
               </button>
-            </form>
+            </div>
           </div>
         </div>
       )}
 
-      {/* TAB 2: REVIEW & QUIZ PRACTICE */}
+      {/* TAB 3: SELF-STUDY READINESS QUIZ */}
       {activeTab === 'quiz' && (
         <div className="space-y-6">
-          <div className="google-card p-5">
-            <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+          <div className="google-card p-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-200">
               <div>
-                <span className="text-xs font-bold text-emerald-600 uppercase">Readiness Assessment</span>
-                <h3 className="text-base font-bold text-gray-900 mt-0.5">{currentQuiz.title}</h3>
+                <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Lesson Readiness Self-Test</span>
+                <h3 className="text-lg font-bold text-gray-900 mt-0.5">{currentQuiz.title}</h3>
+                <p className="text-xs text-gray-500 mt-1">Answer the questions below to test your understanding before lecture</p>
               </div>
 
               <button
                 onClick={handleGenerateNewQuiz}
                 disabled={isQuizGenerating}
-                className="google-btn-outline text-xs flex items-center gap-2 py-2 px-4"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-xl transition-all shadow-2xs disabled:opacity-50 cursor-pointer"
               >
-                {isQuizGenerating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Generating Quiz...</span>
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-4 h-4 text-blue-600" />
-                    <span>Generate New AI Adaptive Quiz</span>
-                  </>
-                )}
+                {isQuizGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 text-emerald-600" />}
+                <span>Generate New AI Questions</span>
               </button>
             </div>
 
-            {/* Questions List */}
             <div className="mt-6 space-y-6">
-              {currentQuiz.questions.map((q, idx) => (
-                <div key={q.id} className="p-4 bg-gray-50/70 border border-gray-200 rounded-xl space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2.5 py-0.5 rounded-full">
-                      Question {idx + 1} ({q.type.toUpperCase()})
+              {currentQuiz.questions.map((q, qIndex) => (
+                <div key={q.id} className="p-4 rounded-xl bg-gray-50/70 border border-gray-200 space-y-3">
+                  <div className="flex items-start gap-2">
+                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center shrink-0">
+                      {qIndex + 1}
                     </span>
-                    {q.relatedKeyword && (
-                      <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-semibold">
-                        {q.relatedKeyword}
-                      </span>
-                    )}
+                    <h4 className="text-xs font-bold text-gray-900 pt-0.5 leading-relaxed">{q.question}</h4>
                   </div>
 
-                  <p className="text-sm font-bold text-gray-900">{q.question}</p>
-
-                  {/* Multiple Choice Options */}
                   {q.type === 'mcq' && q.options && (
-                    <div className="space-y-2 pl-1">
-                      {q.options.map((opt, optIdx) => (
-                        <label
-                          key={optIdx}
-                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer text-xs transition-all ${
-                            quizAnswers[q.id] === optIdx
-                              ? 'bg-blue-50 border-blue-600 font-semibold text-blue-900'
-                              : 'bg-white border-gray-200 hover:bg-gray-100/60 text-gray-700'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name={`q-${q.id}`}
-                            checked={quizAnswers[q.id] === optIdx}
-                            onChange={() => setQuizAnswers(prev => ({ ...prev, [q.id]: optIdx }))}
-                            disabled={quizSubmitted}
-                            className="text-blue-600 focus:ring-blue-500"
-                          />
-                          <span>{opt}</span>
-                        </label>
-                      ))}
+                    <div className="space-y-2 pl-8">
+                      {q.options.map((opt, optIndex) => {
+                        const isSelected = quizAnswers[q.id] === optIndex;
+                        const isCorrect = optIndex === q.correctAnswer;
+                        let optionStyle = 'bg-white border-gray-200 hover:border-gray-300';
+
+                        if (quizSubmitted) {
+                          if (isCorrect) {
+                            optionStyle = 'bg-emerald-50 border-emerald-500 text-emerald-900 font-semibold';
+                          } else if (isSelected && !isCorrect) {
+                            optionStyle = 'bg-rose-50 border-rose-400 text-rose-900';
+                          }
+                        } else if (isSelected) {
+                          optionStyle = 'bg-blue-50 border-blue-600 text-blue-900 font-semibold';
+                        }
+
+                        return (
+                          <div
+                            key={optIndex}
+                            onClick={() => !quizSubmitted && setQuizAnswers(prev => ({ ...prev, [q.id]: optIndex }))}
+                            className={`p-3 rounded-lg border text-xs cursor-pointer transition-all flex items-center justify-between ${optionStyle}`}
+                          >
+                            <span>{opt}</span>
+                            {quizSubmitted && isCorrect && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                            {quizSubmitted && isSelected && !isCorrect && <AlertCircle className="w-4 h-4 text-rose-500" />}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
-                  {/* Essay / Practical Answer Area */}
                   {q.type !== 'mcq' && (
-                    <div>
+                    <div className="pl-8">
                       <textarea
                         rows={3}
-                        placeholder="Write your explanation and reasoning..."
-                        value={String(quizAnswers[q.id] || '')}
-                        onChange={(e) => setQuizAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
                         disabled={quizSubmitted}
-                        className="w-full p-3 bg-white border border-gray-300 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Write your explanation in your own words..."
+                        value={(quizAnswers[q.id] as string) || ''}
+                        onChange={(e) => setQuizAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                        className="w-full p-3 bg-white border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
                   )}
 
-                  {/* Submitted Feedback & Explanation */}
-                  {quizSubmitted && (
-                    <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-lg text-xs text-emerald-950 space-y-1">
-                      <span className="font-bold text-emerald-900 flex items-center gap-1">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" /> AI Feedback & Explanation:
-                      </span>
-                      <p>{q.explanation}</p>
+                  {quizSubmitted && q.explanation && (
+                    <div className="mt-2 pl-8 p-3 rounded-lg bg-blue-50/70 border border-blue-100 text-xs text-blue-900">
+                      <strong>AI Explanation:</strong> {q.explanation}
                     </div>
                   )}
                 </div>
               ))}
             </div>
 
-            {/* Quiz Action Bar & Result */}
-            <div className="mt-6 pt-4 border-t border-gray-200 flex items-center justify-between">
+            <div className="mt-6 pt-5 border-t border-gray-200 flex items-center justify-between">
               {quizSubmitted ? (
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-emerald-100 text-emerald-800 rounded-lg font-extrabold text-sm flex items-center gap-1.5">
-                    <Award className="w-5 h-5 text-emerald-600" />
-                    <span>Your Quiz Score: {calculateScore()} / 100</span>
+                  <div className="flex items-center gap-1.5 text-sm font-bold text-gray-900">
+                    <Award className="w-5 h-5 text-amber-500" />
+                    <span>Your Readiness Score:</span>
+                    <span className={`text-base font-extrabold ${calculateScore() >= 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {calculateScore()} / 100
+                    </span>
                   </div>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500">
+                  {Object.keys(quizAnswers).length} of {currentQuiz.questions.length} questions answered
+                </div>
+              )}
+
+              <div className="flex items-center gap-3">
+                {quizSubmitted ? (
                   <button
                     onClick={() => {
                       setQuizSubmitted(false);
                       setQuizAnswers({});
                     }}
-                    className="google-btn-outline text-xs py-2 px-4"
+                    className="google-btn-secondary text-xs px-4 py-2 cursor-pointer"
                   >
                     Retake Quiz
                   </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setQuizSubmitted(true)}
-                  disabled={Object.keys(quizAnswers).length === 0}
-                  className="google-btn-primary text-xs py-2.5 px-6 disabled:opacity-50"
-                >
-                  Submit Quiz Answers
-                </button>
-              )}
+                ) : (
+                  <button
+                    onClick={() => setQuizSubmitted(true)}
+                    disabled={Object.keys(quizAnswers).length === 0}
+                    className="google-btn-primary text-xs px-6 py-2.5 disabled:opacity-50 cursor-pointer"
+                  >
+                    Submit Quiz & Get Score
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

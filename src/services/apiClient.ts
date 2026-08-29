@@ -40,14 +40,30 @@ export interface RequestConfig extends RequestOptions {
   body?: any;
 }
 
+// Optional custom token provider for testing or custom session contexts
+let customTokenProvider: (() => Promise<string | null>) | null = null;
+
+export function setCustomTokenProvider(provider: (() => Promise<string | null>) | null) {
+  customTokenProvider = provider;
+}
+
 /**
  * Resolves current Firebase ID token.
+ * Waits for auth state resolution if Firebase Auth is initializing.
  */
 export async function getFirebaseToken(): Promise<string | null> {
+  if (customTokenProvider) {
+    return await customTokenProvider();
+  }
+
   if (!auth) return null;
-  const user = auth.currentUser;
-  if (!user) return null;
   try {
+    // If Firebase Auth is still initializing, wait for it to be ready
+    if (typeof auth.authStateReady === 'function') {
+      await auth.authStateReady();
+    }
+    const user = auth.currentUser;
+    if (!user) return null;
     return await user.getIdToken();
   } catch (error) {
     console.warn('Failed to retrieve Firebase ID token:', error);
@@ -80,9 +96,15 @@ class ApiClient {
 
     // Attach Authorization header if not skipped
     if (!config.skipAuth) {
-      const token = await getFirebaseToken();
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+      // If authorization header was not manually provided in config.headers, resolve token
+      if (!headers['Authorization']) {
+        const token = await getFirebaseToken();
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        } else {
+          // Protected request attempted while unauthenticated
+          throw new ApiError('Unauthorized: Missing token', 401);
+        }
       }
     }
 
@@ -164,3 +186,4 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient('/api');
+
