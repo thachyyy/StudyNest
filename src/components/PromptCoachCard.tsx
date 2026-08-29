@@ -9,6 +9,8 @@ interface PromptCoachCardProps {
 }
 
 export const PromptCoachCard: React.FC<PromptCoachCardProps> = ({ evaluation, studentName, compact }) => {
+  if (!evaluation) return null;
+
   const getScoreBadgeColor = (score: number) => {
     if (score >= 80) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
     if (score >= 60) return 'bg-amber-50 text-amber-700 border-amber-200';

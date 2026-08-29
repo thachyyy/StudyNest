@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Material, Student, StudentConversation, LearningAnalytics, Keyword, TreeNode } from '../types';
 import { KnowledgeTree } from './KnowledgeTree';
 import { PromptCoachCard } from './PromptCoachCard';
@@ -23,15 +23,31 @@ interface TeacherViewProps {
 }
 
 export const TeacherView: React.FC<TeacherViewProps> = ({
-  materials,
-  students,
-  conversations,
+  materials = [],
+  students = [],
+  conversations = [],
   analytics,
   onAddMaterial
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'content' | 'analytics' | 'eval'>('content');
-  const [selectedMaterial, setSelectedMaterial] = useState<Material>(materials[0] || null);
-  const [selectedStudentForEval, setSelectedStudentForEval] = useState<StudentConversation>(conversations[0] || null);
+  const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(materials[0] || null);
+  const [selectedStudentForEval, setSelectedStudentForEval] = useState<StudentConversation | null>(conversations[0] || null);
+
+  useEffect(() => {
+    if (materials.length > 0 && (!selectedMaterial || !materials.some(m => m.id === selectedMaterial.id))) {
+      setSelectedMaterial(materials[0]);
+    } else if (materials.length === 0) {
+      setSelectedMaterial(null);
+    }
+  }, [materials]);
+
+  useEffect(() => {
+    if (conversations.length > 0 && (!selectedStudentForEval || !conversations.some(c => c.id === selectedStudentForEval.id))) {
+      setSelectedStudentForEval(conversations[0]);
+    } else if (conversations.length === 0) {
+      setSelectedStudentForEval(null);
+    }
+  }, [conversations]);
 
   const {
     classesState,
@@ -342,7 +358,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({
                   {/* Selected Material Tree Visualizer */}
                   {selectedMaterial && (
                     <div className="space-y-6">
-                      <KnowledgeTree nodes={selectedMaterial.treeNodes} />
+                      <KnowledgeTree nodes={selectedMaterial.treeNodes || []} />
 
                       {/* Extracted Keywords & Prompts */}
                       <div className="google-card p-5">
@@ -351,7 +367,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({
                         </h4>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {selectedMaterial.keywords.map((kw) => (
+                          {(selectedMaterial.keywords || []).map((kw) => (
                             <div key={kw.id} className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
                               <div className="flex items-center justify-between">
                                 <span className="text-xs font-bold text-gray-900">{kw.word}</span>
@@ -648,7 +664,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({
                     </h4>
 
                     <div className="space-y-4">
-                      {selectedStudentForEval.messages.map((msg) => (
+                      {(selectedStudentForEval.messages || []).map((msg) => (
                         <div key={msg.id} className="space-y-2">
                           {/* Chat Message Bubble */}
                           <div

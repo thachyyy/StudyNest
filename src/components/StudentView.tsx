@@ -147,11 +147,14 @@ export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz
   // Calculate Quiz Score
   const calculateScore = () => {
     let score = 0;
-    currentQuiz.questions.forEach(q => {
+    const questions = currentQuiz?.questions || [];
+    if (questions.length === 0) return 0;
+    questions.forEach(q => {
+      if (!q) return;
       if (q.type === 'mcq' && quizAnswers[q.id] === q.correctAnswer) {
-        score += 100 / currentQuiz.questions.length;
+        score += 100 / questions.length;
       } else if (q.type !== 'mcq' && quizAnswers[q.id] && String(quizAnswers[q.id]).length > 10) {
-        score += 100 / currentQuiz.questions.length;
+        score += 100 / questions.length;
       }
     });
     return Math.round(score);
@@ -433,7 +436,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz
             <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-200">
               <div>
                 <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Lesson Readiness Self-Test</span>
-                <h3 className="text-lg font-bold text-gray-900 mt-0.5">{currentQuiz.title}</h3>
+                <h3 className="text-lg font-bold text-gray-900 mt-0.5">{currentQuiz?.title || 'Readiness Quiz'}</h3>
                 <p className="text-xs text-gray-500 mt-1">Answer the questions below to test your understanding before lecture</p>
               </div>
 
@@ -448,7 +451,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz
             </div>
 
             <div className="mt-6 space-y-6">
-              {currentQuiz.questions.map((q, qIndex) => (
+              {(currentQuiz?.questions || []).map((q, qIndex) => (
                 <div key={q.id} className="p-4 rounded-xl bg-gray-50/70 border border-gray-200 space-y-3">
                   <div className="flex items-start gap-2">
                     <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center shrink-0">
@@ -524,7 +527,7 @@ export const StudentView: React.FC<StudentViewProps> = ({ materials, initialQuiz
                 </div>
               ) : (
                 <div className="text-xs text-gray-500">
-                  {Object.keys(quizAnswers).length} of {currentQuiz.questions.length} questions answered
+                  {Object.keys(quizAnswers).length} of {currentQuiz?.questions?.length || 0} questions answered
                 </div>
               )}
 

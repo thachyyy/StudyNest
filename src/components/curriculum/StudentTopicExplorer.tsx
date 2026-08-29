@@ -97,11 +97,11 @@ export const StudentTopicExplorer: React.FC<StudentTopicExplorerProps> = ({
                 onChange={(e) => setSelectedClassId(e.target.value || null)}
                 className="bg-white border border-slate-300 text-slate-800 text-xs font-bold py-1.5 px-3 rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {classes.map((cls) => (
+                {classes.map((cls) => cls ? (
                   <option key={cls.id} value={cls.id}>
                     {cls.name} ({cls.code})
                   </option>
-                ))}
+                ) : null)}
               </select>
             </div>
           </div>
@@ -129,6 +129,7 @@ export const StudentTopicExplorer: React.FC<StudentTopicExplorerProps> = ({
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {topics.map((topic) => {
+                  if (!topic) return null;
                   const isSelected = selectedTopicId === topic.id;
                   return (
                     <div
@@ -205,6 +206,7 @@ export const StudentTopicExplorer: React.FC<StudentTopicExplorerProps> = ({
           >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {documents.map((doc) => {
+                if (!doc) return null;
                 const formattedDate = doc.createdAt
                   ? new Date(doc.createdAt).toLocaleDateString(undefined, {
                       month: 'short',

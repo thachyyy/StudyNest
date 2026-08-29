@@ -13,11 +13,12 @@ interface KnowledgeTreeProps {
 }
 
 export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
-  nodes,
+  nodes = [],
   onSelectKeyword,
   onAskAi
 }) => {
-  const [selectedNodeId, setSelectedNodeId] = useState<string>(nodes[0]?.id || '');
+  const safeNodes = Array.isArray(nodes) ? nodes.filter(Boolean) : [];
+  const [selectedNodeId, setSelectedNodeId] = useState<string>(safeNodes[0]?.id || '');
   const [viewMode, setViewMode] = useState<'mindmap' | 'vertical' | 'outline'>('mindmap');
   const [searchQuery, setSearchQuery] = useState('');
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -29,10 +30,16 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
   const nodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [svgLines, setSvgLines] = useState<Array<{ id: string; x1: number; y1: number; x2: number; y2: number; isHighlighted: boolean }>>([]);
 
-  const selectedNode = nodes.find(n => n.id === selectedNodeId) || nodes[0] || null;
+  useEffect(() => {
+    if (safeNodes.length > 0 && (!selectedNodeId || !safeNodes.some(n => n.id === selectedNodeId))) {
+      setSelectedNodeId(safeNodes[0].id);
+    }
+  }, [nodes]);
+
+  const selectedNode = safeNodes.find(n => n && n.id === selectedNodeId) || safeNodes[0] || null;
 
   // Root nodes
-  const rootNodes = nodes.filter(n => !n.parentId || !nodes.some(p => p.id === n.parentId));
+  const rootNodes = safeNodes.filter(n => n && (!n.parentId || !safeNodes.some(p => p && p.id === n.parentId)));
 
   // Category badges with NoteLLM aesthetic
   const getCategoryBadge = (category: string) => {
@@ -80,16 +87,17 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
 
   // Get direct children of a node
   const getChildren = (nodeId: string) => {
-    return nodes.filter(n => n.parentId === nodeId || (nodes.find(p => p.id === nodeId)?.childrenIds?.includes(n.id)));
+    return safeNodes.filter(n => n && (n.parentId === nodeId || (safeNodes.find(p => p && p.id === nodeId)?.childrenIds?.includes(n.id))));
   };
 
   // Check if node matches search query
   const matchesSearch = (node: TreeNode) => {
+    if (!node) return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
-      node.label.toLowerCase().includes(q) ||
-      node.description.toLowerCase().includes(q) ||
+      (node.label && node.label.toLowerCase().includes(q)) ||
+      (node.description && node.description.toLowerCase().includes(q)) ||
       (node.keywordRef && node.keywordRef.toLowerCase().includes(q))
     );
   };
@@ -101,8 +109,8 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
     const canvasRect = canvasRef.current.getBoundingClientRect();
     const lines: Array<{ id: string; x1: number; y1: number; x2: number; y2: number; isHighlighted: boolean }> = [];
 
-    nodes.forEach(node => {
-      if (collapsedNodeIds.has(node.id)) return;
+    safeNodes.forEach(node => {
+      if (!node || collapsedNodeIds.has(node.id)) return;
 
       const children = getChildren(node.id);
       const parentEl = nodeRefs.current[node.id];
@@ -111,6 +119,7 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
       const parentRect = parentEl.getBoundingClientRect();
 
       children.forEach(child => {
+        if (!child) return;
         const childEl = nodeRefs.current[child.id];
         if (!childEl) return;
 
@@ -143,7 +152,7 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
       updateSvgConnections();
     }, 100);
     return () => clearTimeout(timer);
-  }, [nodes, selectedNodeId, viewMode, zoomLevel, collapsedNodeIds]);
+  }, [safeNodes, selectedNodeId, viewMode, zoomLevel, collapsedNodeIds]);
 
   // Recalculate SVG lines on window resize
   useEffect(() => {
@@ -170,6 +179,7 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
 
   // Mindmap Node Render (Horizontal Column Layout with SVG curves)
   const renderMindmapBranch = (node: TreeNode, depth: number = 0) => {
+    if (!node) return null;
     const children = getChildren(node.id);
     const isSelected = selectedNodeId === node.id;
     const isCollapsed = collapsedNodeIds.has(node.id);
@@ -242,6 +252,7 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
 
   // Vertical Tree Layout Render
   const renderVerticalBranch = (node: TreeNode, depth: number = 0) => {
+    if (!node) return null;
     const children = getChildren(node.id);
     const isSelected = selectedNodeId === node.id;
     const isCollapsed = collapsedNodeIds.has(node.id);
@@ -450,7 +461,7 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
                   Document Structure & Concept Breakdown
                 </h4>
-                {nodes.map(n => (
+                {safeNodes.map(n => (
                   <div
                     key={n.id}
                     onClick={() => setSelectedNodeId(n.id)}
@@ -471,7 +482,7 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
 
           <div className="mt-3 flex items-center justify-between text-xs text-slate-400 px-2">
             <span>Click any card on the canvas to inspect AI details and lecture notes.</span>
-            <span>{nodes.length} Connected Concept Nodes</span>
+            <span>{safeNodes.length} Connected Concept Nodes</span>
           </div>
         </div>
 
