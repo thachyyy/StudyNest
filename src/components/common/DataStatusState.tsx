@@ -1,6 +1,5 @@
 import React from 'react';
-import { Loader2, AlertCircle, ShieldAlert, Lock, FolderX, RefreshCw, Plus, ShieldCheck, UserCheck } from 'lucide-react';
-import { useFirebase } from '../../context/FirebaseContext';
+import { Loader2, AlertCircle, ShieldAlert, Lock, FolderX, RefreshCw, Plus } from 'lucide-react';
 
 interface DataStatusStateProps {
   loading?: boolean;
@@ -29,7 +28,6 @@ export const DataStatusState: React.FC<DataStatusStateProps> = ({
   onEmptyAction,
   children,
 }) => {
-  const { loginWithGoogle, loginAsDemo } = useFirebase();
   if (loading) {
     return (
       <div className="p-8 text-center flex flex-col items-center justify-center bg-white rounded-2xl border border-slate-200/80 shadow-2xs min-h-[180px]">
@@ -62,48 +60,9 @@ export const DataStatusState: React.FC<DataStatusStateProps> = ({
               </h4>
             </div>
             <p className="text-xs mt-1 text-slate-700 leading-relaxed font-medium">
-              {is401 ? 'Please sign in with Google or select an instant demo profile to access this curriculum resource.' : error}
+              {is401 ? 'Please sign in with Google or select a demo account from the top menu to access this curriculum resource.' : error}
             </p>
-
-            {is401 ? (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => loginWithGoogle()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-                >
-                  <span>Sign in with Google</span>
-                </button>
-                <button
-                  onClick={async () => {
-                    await loginAsDemo('teacher');
-                    if (onRetry) onRetry();
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Demo Teacher</span>
-                </button>
-                <button
-                  onClick={async () => {
-                    await loginAsDemo('student');
-                    if (onRetry) onRetry();
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                >
-                  <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Demo Student</span>
-                </button>
-                {onRetry && (
-                  <button
-                    onClick={onRetry}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-slate-500 hover:text-slate-700 text-xs font-medium cursor-pointer"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Retry</span>
-                  </button>
-                )}
-              </div>
-            ) : onRetry ? (
+            {onRetry && (
               <button
                 onClick={onRetry}
                 className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
@@ -111,7 +70,7 @@ export const DataStatusState: React.FC<DataStatusStateProps> = ({
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Retry Request</span>
               </button>
-            ) : null}
+            )}
           </div>
         </div>
       </div>

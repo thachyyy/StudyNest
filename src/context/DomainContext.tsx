@@ -48,6 +48,7 @@ interface DomainContextType {
   setSelectedDocumentId: (docId: string | null) => void;
   refreshDocuments: () => Promise<void>;
   createDocument: (input: CreateDocumentInput) => Promise<DocumentDTO>;
+  uploadDocument: (file: File | Blob, metadata?: { title?: string; contentType?: string }) => Promise<DocumentDTO>;
   updateDocument: (docId: string, input: UpdateDocumentInput) => Promise<DocumentDTO>;
   deleteDocument: (docId: string) => Promise<void>;
 }
@@ -105,10 +106,10 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       // Maintain selection if still valid, otherwise default to first available
       setSelectedClassId(prevId => {
-        if (prevId && fetchedClasses.some(c => c.id === prevId)) {
+        if (prevId && fetchedClasses.some(c => c && c.id === prevId)) {
           return prevId;
         }
-        return fetchedClasses.length > 0 ? fetchedClasses[0].id : null;
+        return fetchedClasses.length > 0 && fetchedClasses[0] ? fetchedClasses[0].id : null;
       });
     } catch (err: any) {
       const status = err instanceof ApiError ? err.status : (err?.status || 500);
@@ -176,10 +177,10 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
 
       setSelectedTopicId(prevId => {
-        if (prevId && fetchedTopics.some(t => t.id === prevId)) {
+        if (prevId && fetchedTopics.some(t => t && t.id === prevId)) {
           return prevId;
         }
-        return fetchedTopics.length > 0 ? fetchedTopics[0].id : null;
+        return fetchedTopics.length > 0 && fetchedTopics[0] ? fetchedTopics[0].id : null;
       });
     } catch (err: any) {
       const status = err instanceof ApiError ? err.status : (err?.status || 500);
@@ -223,10 +224,10 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
 
       setSelectedDocumentId(prevId => {
-        if (prevId && fetchedDocs.some(d => d.id === prevId)) {
+        if (prevId && fetchedDocs.some(d => d && d.id === prevId)) {
           return prevId;
         }
-        return fetchedDocs.length > 0 ? fetchedDocs[0].id : null;
+        return fetchedDocs.length > 0 && fetchedDocs[0] ? fetchedDocs[0].id : null;
       });
     } catch (err: any) {
       const status = err instanceof ApiError ? err.status : (err?.status || 500);
@@ -326,6 +327,19 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return newDoc;
   }, [selectedTopicId]);
 
+  const uploadDocument = useCallback(async (file: File | Blob, metadata?: { title?: string; contentType?: string }): Promise<DocumentDTO> => {
+    if (!selectedTopicId) {
+      throw new Error('Please select an active topic before uploading a document.');
+    }
+    const newDoc = await documentService.uploadDocument(selectedTopicId, file, metadata);
+    setDocumentsState(prev => ({
+      ...prev,
+      data: [...(prev.data || []), newDoc],
+    }));
+    setSelectedDocumentId(newDoc.id);
+    return newDoc;
+  }, [selectedTopicId]);
+
   const updateDocument = useCallback(async (docId: string, input: UpdateDocumentInput): Promise<DocumentDTO> => {
     const updated = await documentService.updateDocument(docId, input);
     setDocumentsState(prev => ({
@@ -345,21 +359,21 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   // Derived selected objects
-  const classes = classesState.data || [];
+  const classes = useMemo(() => (Array.isArray(classesState.data) ? classesState.data.filter(Boolean) : []), [classesState.data]);
   const selectedClass = useMemo(
-    () => classes.find(c => c.id === selectedClassId) || null,
+    () => classes.find(c => c && c.id === selectedClassId) || null,
     [classes, selectedClassId]
   );
 
-  const topics = topicsState.data || [];
+  const topics = useMemo(() => (Array.isArray(topicsState.data) ? topicsState.data.filter(Boolean) : []), [topicsState.data]);
   const selectedTopic = useMemo(
-    () => topics.find(t => t.id === selectedTopicId) || null,
+    () => topics.find(t => t && t.id === selectedTopicId) || null,
     [topics, selectedTopicId]
   );
 
-  const documents = documentsState.data || [];
+  const documents = useMemo(() => (Array.isArray(documentsState.data) ? documentsState.data.filter(Boolean) : []), [documentsState.data]);
   const selectedDocument = useMemo(
-    () => documents.find(d => d.id === selectedDocumentId) || null,
+    () => documents.find(d => d && d.id === selectedDocumentId) || null,
     [documents, selectedDocumentId]
   );
 
@@ -393,6 +407,7 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setSelectedDocumentId,
         refreshDocuments,
         createDocument,
+        uploadDocument,
         updateDocument,
         deleteDocument,
       }}

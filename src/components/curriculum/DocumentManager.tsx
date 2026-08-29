@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   FileText,
   Plus,
@@ -14,6 +14,8 @@ import {
   Calendar,
   ExternalLink,
   Eye,
+  UploadCloud,
+  FileUp,
 } from 'lucide-react';
 import { useDomain } from '../../context/DomainContext.tsx';
 import { DocumentDTO, CreateDocumentInput, UpdateDocumentInput } from '../../types/domain.ts';
@@ -32,9 +34,19 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ onSelectDocume
     setSelectedDocumentId,
     refreshDocuments,
     createDocument,
+    uploadDocument,
     updateDocument,
     deleteDocument,
   } = useDomain();
+
+  // PDF Upload Modal State
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadTitle, setUploadTitle] = useState('');
+  const [uploadContentType, setUploadContentType] = useState('lecture_notes');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Create Modal State
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -59,6 +71,81 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ onSelectDocume
 
   // Delete State
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const openUploadModal = () => {
+    setUploadFile(null);
+    setUploadTitle('');
+    setUploadContentType('lecture_notes');
+    setUploadError(null);
+    setIsUploadOpen(true);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setUploadError(null);
+    if (!file) {
+      setUploadFile(null);
+      return;
+    }
+
+    // Client-side quick validation check
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'pdf' && file.type !== 'application/pdf') {
+      setUploadError('Invalid file type: Please select a valid .pdf document.');
+      setUploadFile(null);
+      return;
+    }
+
+    if (file.size === 0) {
+      setUploadError('Selected file is empty (0 bytes).');
+      setUploadFile(null);
+      return;
+    }
+
+    const maxBytes = 20 * 1024 * 1024; // 20MB
+    if (file.size > maxBytes) {
+      setUploadError('File size exceeds the 20MB maximum limit.');
+      setUploadFile(null);
+      return;
+    }
+
+    setUploadFile(file);
+    // Auto-populate title if empty or default
+    if (!uploadTitle.trim()) {
+      const cleanName = file.name.replace(/\.pdf$/i, '').replace(/[_-]/g, ' ');
+      setUploadTitle(cleanName);
+    }
+  };
+
+  const handleUploadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadFile) {
+      setUploadError('Please choose a PDF file to upload.');
+      return;
+    }
+
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const newDoc = await uploadDocument(uploadFile, {
+        title: uploadTitle.trim() || uploadFile.name.replace(/\.pdf$/i, ''),
+        contentType: uploadContentType,
+      });
+      setIsUploadOpen(false);
+      setUploadFile(null);
+      setUploadTitle('');
+      if (onSelectDocumentCallback) {
+        onSelectDocumentCallback(newDoc);
+      }
+    } catch (err: any) {
+      setUploadError(err?.message || 'Failed to upload PDF document.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,22 +266,31 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ onSelectDocume
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setCreateData({
-              title: '',
-              contentType: 'lecture_notes',
-              content: '',
-              sourceUrl: '',
-              status: 'ready',
-            });
-            setIsCreateOpen(true);
-          }}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Document</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={openUploadModal}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+          >
+            <UploadCloud className="w-4 h-4" />
+            <span>Upload PDF</span>
+          </button>
+          <button
+            onClick={() => {
+              setCreateData({
+                title: '',
+                contentType: 'lecture_notes',
+                content: '',
+                sourceUrl: '',
+                status: 'ready',
+              });
+              setIsCreateOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Notes</span>
+          </button>
+        </div>
       </div>
 
       {/* Document List with DataStatusState */}
@@ -206,12 +302,13 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ onSelectDocume
         onRetry={refreshDocuments}
         isEmpty={!documentsState.loading && !documentsState.error && documents.length === 0}
         emptyTitle="No documents yet"
-        emptyDescription="Add lecture notes, reading excerpts, or reference metadata for students."
-        emptyActionLabel="Add First Document"
-        onEmptyAction={() => setIsCreateOpen(true)}
+        emptyDescription="Upload lecture notes, reading excerpts, or study material PDF for students."
+        emptyActionLabel="Upload First PDF"
+        onEmptyAction={openUploadModal}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {documents.map((doc) => {
+            if (!doc) return null;
             const isSelected = selectedDocumentId === doc.id;
             const formattedDate = doc.createdAt
               ? new Date(doc.createdAt).toLocaleDateString(undefined, {
@@ -326,6 +423,142 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ onSelectDocume
           })}
         </div>
       </DataStatusState>
+
+      {/* PDF UPLOAD MODAL */}
+      {isUploadOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-100 text-emerald-700 rounded-lg">
+                  <UploadCloud className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Upload PDF Document</h3>
+                  <p className="text-[11px] text-slate-500">Topic: {selectedTopic.title}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => !uploading && setIsUploadOpen(false)}
+                disabled={uploading}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUploadSubmit} className="p-6 space-y-4">
+              {uploadError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{uploadError}</span>
+                </div>
+              )}
+
+              {/* PDF File Picker */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Select PDF File <span className="text-rose-500">*</span>
+                </label>
+                <div
+                  onClick={() => !uploading && fileInputRef.current?.click()}
+                  className={`p-4 border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors ${
+                    uploadFile
+                      ? 'border-emerald-400 bg-emerald-50/50'
+                      : 'border-slate-300 hover:border-emerald-500 bg-slate-50/70 hover:bg-slate-50'
+                  } ${uploading ? 'pointer-events-none opacity-60' : ''}`}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                  <div className={`p-2.5 rounded-full ${uploadFile ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                    <FileUp className="w-5 h-5" />
+                  </div>
+                  {uploadFile ? (
+                    <div className="text-center">
+                      <p className="text-xs font-bold text-slate-900 break-all">{uploadFile.name}</p>
+                      <p className="text-[11px] font-medium text-emerald-700 mt-0.5">
+                        {(uploadFile.size / (1024 * 1024)).toFixed(2)} MB • Ready to upload
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <p className="text-xs font-semibold text-slate-800">Click to choose a PDF file</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Max size: 20MB (.pdf only)</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Document Title */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Document Title <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Cellular Respiration Study Guide"
+                  value={uploadTitle}
+                  onChange={(e) => setUploadTitle(e.target.value)}
+                  required
+                  disabled={uploading}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-slate-100"
+                />
+              </div>
+
+              {/* Document Type */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Document Type
+                </label>
+                <select
+                  value={uploadContentType}
+                  onChange={(e) => setUploadContentType(e.target.value)}
+                  disabled={uploading}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-slate-100"
+                >
+                  <option value="lecture_notes">Lecture Notes</option>
+                  <option value="syllabus">Syllabus</option>
+                  <option value="exercise">Exercise / Problems</option>
+                  <option value="reference">Reference Material</option>
+                </select>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsUploadOpen(false)}
+                  disabled={uploading}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploading || !uploadFile}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Validating & Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud className="w-3.5 h-3.5" />
+                      <span>Upload PDF</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* CREATE DOCUMENT MODAL */}
       {isCreateOpen && (

@@ -65,20 +65,14 @@ export async function getFirebaseToken(): Promise<string | null> {
     return await customTokenProvider();
   }
 
-  if (auth && auth.currentUser) {
-    try {
-      return await auth.currentUser.getIdToken();
-    } catch (error) {
-      console.warn('Firebase token retrieval notice:', error);
-    }
+  if (!auth) return null;
+  try {
+    const user = auth.currentUser;
+    if (!user) return null;
+    return await user.getIdToken();
+  } catch (error) {
+    return null;
   }
-
-  // Fallback to demo token when not signed in to Firebase to prevent 401 in preview mode
-  if (currentDemoRole) {
-    return `mock-token:${currentDemoRole === 'student' ? 'student-anminh' : 'teacher-sarah'}`;
-  }
-
-  return null;
 }
 
 class ApiClient {

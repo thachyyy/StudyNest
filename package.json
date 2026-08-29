@@ -11,7 +11,7 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "db:seed": "tsx src/db/seed.ts",
-    "test": "tsx tests/demo-seed.test.ts && tsx tests/demo-identity-mode.test.ts && tsx tests/demo-teacher-class-flow.test.ts && tsx tests/core-domain.test.ts && tsx tests/auth-flow.test.ts && tsx tests/frontend-services.test.ts"
+    "test": "tsx tests/demo-seed.test.ts && tsx tests/demo-identity-mode.test.ts && tsx tests/demo-teacher-class-flow.test.ts && tsx tests/core-domain.test.ts && tsx tests/auth-flow.test.ts && tsx tests/frontend-services.test.ts && tsx tests/pdf-upload-flow.test.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.1",
@@ -26,6 +26,7 @@
     "firebase-admin": "^14.3.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "multer": "^2.3.0",
     "pg": "^8.23.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
+    "@types/multer": "^2.2.0",
     "@types/node": "^22.14.0",
     "@types/pg": "^8.23.1",
     "autoprefixer": "^10.4.21",
