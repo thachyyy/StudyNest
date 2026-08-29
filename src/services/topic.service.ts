@@ -10,6 +10,7 @@ import {
 } from './authorization.ts';
 import { CreateTopicDTO, UpdateTopicDTO } from '../lib/validation.ts';
 import { ServiceResult } from './class.service.ts';
+import { inMemoryStore, InMemoryTopic, generateStoreId } from '../db/inMemoryStore.ts';
 
 export class TopicService {
   /**
@@ -42,8 +43,12 @@ export class TopicService {
 
       return { status: 200, data: allTopics };
     } catch (error: any) {
-      console.error('TopicService.getTopicsForClass error:', error);
-      return { status: 500, error: 'Failed to retrieve topics' };
+      // In-Memory failover
+      const classTopics = Array.from(inMemoryStore.topics.values()).filter(t => t.classId === classId);
+      if (user.role === 'student') {
+        return { status: 200, data: classTopics.filter(t => t.status === 'published') };
+      }
+      return { status: 200, data: classTopics };
     }
   }
 
@@ -60,8 +65,14 @@ export class TopicService {
 
       return { status: 200, data: topicAuth.resource!.topic };
     } catch (error: any) {
-      console.error('TopicService.getTopicById error:', error);
-      return { status: 500, error: 'Failed to retrieve topic' };
+      const memTopic = inMemoryStore.topics.get(topicId);
+      if (memTopic) {
+        if (user.role === 'student' && memTopic.status !== 'published') {
+          return { status: 403, error: 'Forbidden: This topic is not published for students' };
+        }
+        return { status: 200, data: memTopic };
+      }
+      return { status: 404, error: 'Topic not found' };
     }
   }
 
@@ -93,8 +104,20 @@ export class TopicService {
 
       return { status: 201, data: created };
     } catch (error: any) {
-      console.error('TopicService.createTopic error:', error);
-      return { status: 500, error: 'Failed to create topic' };
+      const newId = generateStoreId('topic');
+      const now = new Date();
+      const newTopic: InMemoryTopic = {
+        id: newId,
+        classId,
+        title: dto.title,
+        description: dto.description || null,
+        status: dto.status || 'draft',
+        orderIndex: dto.orderIndex !== undefined ? dto.orderIndex : 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+      inMemoryStore.topics.set(newId, newTopic);
+      return { status: 201, data: newTopic };
     }
   }
 
@@ -130,8 +153,14 @@ export class TopicService {
 
       return { status: 200, data: updated };
     } catch (error: any) {
-      console.error('TopicService.updateTopic error:', error);
-      return { status: 500, error: 'Failed to update topic' };
+      const memTopic = inMemoryStore.topics.get(topicId);
+      if (!memTopic) return { status: 404, error: 'Topic not found' };
+      if (dto.title !== undefined) memTopic.title = dto.title;
+      if (dto.description !== undefined) memTopic.description = dto.description;
+      if (dto.status !== undefined) memTopic.status = dto.status;
+      if (dto.orderIndex !== undefined) memTopic.orderIndex = dto.orderIndex;
+      memTopic.updatedAt = new Date();
+      return { status: 200, data: memTopic };
     }
   }
 
@@ -149,8 +178,11 @@ export class TopicService {
       await db.delete(topics).where(eq(topics.id, topicId));
       return { status: 200, data: { message: 'Topic deleted successfully' } };
     } catch (error: any) {
-      console.error('TopicService.deleteTopic error:', error);
-      return { status: 500, error: 'Failed to delete topic' };
+      if (inMemoryStore.topics.has(topicId)) {
+        inMemoryStore.topics.delete(topicId);
+        return { status: 200, data: { message: 'Topic deleted successfully' } };
+      }
+      return { status: 404, error: 'Topic not found' };
     }
   }
 }

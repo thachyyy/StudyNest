@@ -42,14 +42,23 @@ export interface RequestConfig extends RequestOptions {
 
 // Optional custom token provider for testing or custom session contexts
 let customTokenProvider: (() => Promise<string | null>) | null = null;
+let currentDemoRole: 'teacher' | 'student' | 'admin' | null = 'teacher';
 
 export function setCustomTokenProvider(provider: (() => Promise<string | null>) | null) {
   customTokenProvider = provider;
 }
 
+export function setDemoRole(role: 'teacher' | 'student' | 'admin' | null) {
+  currentDemoRole = role;
+}
+
+export function getDemoRole(): 'teacher' | 'student' | 'admin' | null {
+  return currentDemoRole;
+}
+
 /**
  * Resolves current Firebase ID token.
- * Waits for auth state resolution if Firebase Auth is initializing.
+ * Returns null if no user is signed in or in demo mode.
  */
 export async function getFirebaseToken(): Promise<string | null> {
   if (customTokenProvider) {
@@ -58,15 +67,10 @@ export async function getFirebaseToken(): Promise<string | null> {
 
   if (!auth) return null;
   try {
-    // If Firebase Auth is still initializing, wait for it to be ready
-    if (typeof auth.authStateReady === 'function') {
-      await auth.authStateReady();
-    }
     const user = auth.currentUser;
     if (!user) return null;
     return await user.getIdToken();
   } catch (error) {
-    console.warn('Failed to retrieve Firebase ID token:', error);
     return null;
   }
 }
@@ -76,6 +80,14 @@ class ApiClient {
 
   constructor(baseUrl: string = '/api') {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
+  }
+
+  public setDemoRole(role: 'teacher' | 'student' | 'admin' | null) {
+    setDemoRole(role);
+  }
+
+  public getDemoRole(): 'teacher' | 'student' | 'admin' | null {
+    return getDemoRole();
   }
 
   private buildUrl(endpoint: string): string {
@@ -93,6 +105,11 @@ class ApiClient {
       'Accept': 'application/json',
       ...config.headers,
     };
+
+    // Attach demo role header if configured (for backend Demo Identity Mode)
+    if (currentDemoRole && !headers['x-demo-role']) {
+      headers['x-demo-role'] = currentDemoRole;
+    }
 
     // Attach Authorization header if not skipped
     if (!config.skipAuth) {

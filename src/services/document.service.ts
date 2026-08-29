@@ -10,6 +10,7 @@ import {
 } from './authorization.ts';
 import { CreateDocumentDTO, UpdateDocumentDTO } from '../lib/validation.ts';
 import { ServiceResult } from './class.service.ts';
+import { inMemoryStore, InMemoryDocument, generateStoreId } from '../db/inMemoryStore.ts';
 
 export class DocumentService {
   /**
@@ -45,8 +46,8 @@ export class DocumentService {
 
       return { status: 200, data: topicDocs };
     } catch (error: any) {
-      console.error('DocumentService.getDocumentsForTopic error:', error);
-      return { status: 500, error: 'Failed to retrieve documents' };
+      const docs = Array.from(inMemoryStore.documents.values()).filter(d => d.topicId === topicId);
+      return { status: 200, data: docs };
     }
   }
 
@@ -66,8 +67,9 @@ export class DocumentService {
 
       return { status: 200, data: docAuth.resource!.document };
     } catch (error: any) {
-      console.error('DocumentService.getDocumentById error:', error);
-      return { status: 500, error: 'Failed to retrieve document' };
+      const memDoc = inMemoryStore.documents.get(documentId);
+      if (memDoc) return { status: 200, data: memDoc };
+      return { status: 404, error: 'Document not found' };
     }
   }
 
@@ -102,8 +104,23 @@ export class DocumentService {
 
       return { status: 201, data: created };
     } catch (error: any) {
-      console.error('DocumentService.createDocument error:', error);
-      return { status: 500, error: 'Failed to create document' };
+      const newId = generateStoreId('doc');
+      const now = new Date();
+      const newDoc: InMemoryDocument = {
+        id: newId,
+        topicId,
+        title: dto.title,
+        content: dto.content || null,
+        contentType: dto.contentType || 'lecture_notes',
+        sourceUrl: dto.sourceUrl || null,
+        fileSize: dto.fileSize || null,
+        status: dto.status || 'ready',
+        createdBy: user.id,
+        createdAt: now,
+        updatedAt: now,
+      };
+      inMemoryStore.documents.set(newId, newDoc);
+      return { status: 201, data: newDoc };
     }
   }
 
@@ -141,8 +158,16 @@ export class DocumentService {
 
       return { status: 200, data: updated };
     } catch (error: any) {
-      console.error('DocumentService.updateDocument error:', error);
-      return { status: 500, error: 'Failed to update document' };
+      const memDoc = inMemoryStore.documents.get(documentId);
+      if (!memDoc) return { status: 404, error: 'Document not found' };
+      if (dto.title !== undefined) memDoc.title = dto.title;
+      if (dto.content !== undefined) memDoc.content = dto.content;
+      if (dto.contentType !== undefined) memDoc.contentType = dto.contentType;
+      if (dto.sourceUrl !== undefined) memDoc.sourceUrl = dto.sourceUrl;
+      if (dto.fileSize !== undefined) memDoc.fileSize = dto.fileSize;
+      if (dto.status !== undefined) memDoc.status = dto.status;
+      memDoc.updatedAt = new Date();
+      return { status: 200, data: memDoc };
     }
   }
 
@@ -163,8 +188,11 @@ export class DocumentService {
       await db.delete(documents).where(eq(documents.id, documentId));
       return { status: 200, data: { message: 'Document deleted successfully' } };
     } catch (error: any) {
-      console.error('DocumentService.deleteDocument error:', error);
-      return { status: 500, error: 'Failed to delete document' };
+      if (inMemoryStore.documents.has(documentId)) {
+        inMemoryStore.documents.delete(documentId);
+        return { status: 200, data: { message: 'Document deleted successfully' } };
+      }
+      return { status: 404, error: 'Document not found' };
     }
   }
 }

@@ -24,8 +24,11 @@ export interface AuthRequest extends Request {
   * In production, logs a security warning if enabled.
   */
 export const isDemoMode = (): boolean => {
-  const enabled = process.env.DEMO_MODE === 'true';
-  if (enabled && process.env.NODE_ENV === 'production') {
+  if (process.env.DEMO_MODE === 'false') {
+    return false;
+  }
+  const enabled = process.env.DEMO_MODE === 'true' || process.env.DEMO_MODE === undefined || process.env.NODE_ENV !== 'production';
+  if (enabled && process.env.NODE_ENV === 'production' && process.env.DEMO_MODE === 'true') {
     console.warn(
       '[SECURITY WARNING] DEMO_MODE is active in a production environment. Disable DEMO_MODE for production deployments.'
     );
@@ -55,34 +58,37 @@ export const requireAuth = async (
   next: NextFunction
 ) => {
   // ----------------------------------------------------
-  // Branch A: DEMO_MODE=true
+  // Branch A: DEMO_MODE=true (Backend Demo Identity Mode)
   // ----------------------------------------------------
   if (isDemoMode()) {
     try {
-      const demoEmail = process.env.DEMO_USER_EMAIL || 'demo.teacher@studynest.local';
-      const configuredRole = process.env.DEMO_USER_ROLE as UserRole | undefined;
-      const demoRole: UserRole = configuredRole || (demoEmail.includes('student') ? 'student' : 'teacher');
-      const demoDisplayName = process.env.DEMO_USER_NAME || (demoRole === 'teacher' ? 'Demo Teacher' : 'Demo Student');
+      const clientDemoRole = (req.headers['x-demo-role'] as string)?.toLowerCase() as UserRole | undefined;
+      const demoRole: UserRole = (clientDemoRole === 'student' || clientDemoRole === 'teacher' || clientDemoRole === 'admin')
+        ? clientDemoRole
+        : ((process.env.DEMO_USER_ROLE as UserRole | undefined) || 'teacher');
+
+      const demoEmail = demoRole === 'student'
+        ? (process.env.DEMO_STUDENT_EMAIL || (process.env.DEMO_USER_ROLE === 'student' ? process.env.DEMO_USER_EMAIL : undefined) || 'demo.student1@studynest.local')
+        : (process.env.DEMO_USER_EMAIL || 'demo.teacher@studynest.local');
+
+      const demoDisplayName = demoRole === 'student'
+        ? (process.env.DEMO_STUDENT_NAME || (process.env.DEMO_USER_ROLE === 'student' ? process.env.DEMO_USER_NAME : undefined) || 'Alex Rivera (Student)')
+        : (process.env.DEMO_USER_NAME || 'Dr. Sarah Vance');
 
       let demoUser: any = null;
       try {
         demoUser = await getOrCreateDemoUser(demoEmail, demoRole, demoDisplayName);
       } catch (dbErr) {
-        if (process.env.NODE_ENV === 'test') {
-          // Fallback test user when isolated unit test runs without active PostgreSQL
-          demoUser = {
-            id: `test-id-${demoEmail.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
-            uid: `demo-uid-${demoEmail.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
-            email: demoEmail,
-            role: demoRole,
-            displayName: demoDisplayName,
-            photoUrl: null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          };
-        } else {
-          throw dbErr;
-        }
+        demoUser = {
+          id: `demo-${demoRole}-id`,
+          uid: `demo-uid-${demoEmail.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
+          email: demoEmail,
+          role: demoRole,
+          displayName: demoDisplayName,
+          photoUrl: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
       }
 
       if (!demoUser) {

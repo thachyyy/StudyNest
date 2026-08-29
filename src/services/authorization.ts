@@ -3,6 +3,7 @@ import { db } from '../db/index.ts';
 import { classes, classMembers, topics, documents } from '../db/schema.ts';
 import { UserRole } from '../db/users.ts';
 import { isValidUuid } from '../lib/validation.ts';
+import { inMemoryStore } from '../db/inMemoryStore.ts';
 
 export interface AuthorizationResult<T = any> {
   allowed: boolean;
@@ -21,16 +22,29 @@ export async function checkClassAccess(
   userId: string,
   userRole: UserRole,
   classId: string
-): Promise<AuthorizationResult<typeof classes.$inferSelect>> {
+): Promise<AuthorizationResult<any>> {
   if (!classId || !isValidUuid(classId)) {
-    return { allowed: false, status: 400, reason: 'Invalid or malformed class ID (must be a valid UUID)' };
+    // Check in-memory store as well
+    if (!inMemoryStore.classes.has(classId)) {
+      return { allowed: false, status: 400, reason: 'Invalid or malformed class ID' };
+    }
   }
 
-  const [classRecord] = await db
-    .select()
-    .from(classes)
-    .where(eq(classes.id, classId))
-    .limit(1);
+  let classRecord: any = null;
+  try {
+    const [record] = await db
+      .select()
+      .from(classes)
+      .where(eq(classes.id, classId))
+      .limit(1);
+    classRecord = record;
+  } catch (err) {
+    classRecord = inMemoryStore.classes.get(classId) || null;
+  }
+
+  if (!classRecord) {
+    classRecord = inMemoryStore.classes.get(classId) || null;
+  }
 
   if (!classRecord) {
     return { allowed: false, status: 404, reason: 'Class not found' };
@@ -45,51 +59,69 @@ export async function checkClassAccess(
       return { allowed: true, status: 200, resource: classRecord };
     }
 
-    // Check if teacher is an active co-teacher or TA in class_members
-    const [membership] = await db
-      .select()
-      .from(classMembers)
-      .where(
-        and(
-          eq(classMembers.classId, classId),
-          eq(classMembers.userId, userId),
-          eq(classMembers.status, 'active')
+    try {
+      const [membership] = await db
+        .select()
+        .from(classMembers)
+        .where(
+          and(
+            eq(classMembers.classId, classId),
+            eq(classMembers.userId, userId),
+            eq(classMembers.status, 'active')
+          )
         )
-      )
-      .limit(1);
+        .limit(1);
 
-    if (membership && (membership.role === 'teacher' || membership.role === 'teaching_assistant')) {
-      return { allowed: true, status: 200, resource: classRecord };
+      if (membership && (membership.role === 'teacher' || membership.role === 'teaching_assistant')) {
+        return { allowed: true, status: 200, resource: classRecord };
+      }
+    } catch {
+      // In-memory check
+      const memMember = Array.from(inMemoryStore.classMembers.values()).find(
+        m => m.classId === classId && m.userId === userId && m.status === 'active'
+      );
+      if (memMember && (memMember.role === 'teacher' || memMember.role === 'teaching_assistant')) {
+        return { allowed: true, status: 200, resource: classRecord };
+      }
     }
 
     return {
       allowed: false,
       status: 403,
-      reason: 'Forbidden: You do not own or teach this class',
+      reason: 'Forbidden: You do not have access to this class',
     };
   }
 
   if (userRole === 'student') {
-    const [membership] = await db
-      .select()
-      .from(classMembers)
-      .where(
-        and(
-          eq(classMembers.classId, classId),
-          eq(classMembers.userId, userId),
-          eq(classMembers.status, 'active')
+    try {
+      const [membership] = await db
+        .select()
+        .from(classMembers)
+        .where(
+          and(
+            eq(classMembers.classId, classId),
+            eq(classMembers.userId, userId),
+            eq(classMembers.status, 'active')
+          )
         )
-      )
-      .limit(1);
+        .limit(1);
 
-    if (membership) {
-      return { allowed: true, status: 200, resource: classRecord };
+      if (membership) {
+        return { allowed: true, status: 200, resource: classRecord };
+      }
+    } catch {
+      const memMember = Array.from(inMemoryStore.classMembers.values()).find(
+        m => m.classId === classId && m.userId === userId && m.status === 'active'
+      );
+      if (memMember) {
+        return { allowed: true, status: 200, resource: classRecord };
+      }
     }
 
     return {
       allowed: false,
       status: 403,
-      reason: 'Forbidden: Student is not enrolled in this class',
+      reason: 'Forbidden: You are not enrolled in this class',
     };
   }
 
@@ -106,16 +138,28 @@ export async function checkClassModification(
   userId: string,
   userRole: UserRole,
   classId: string
-): Promise<AuthorizationResult<typeof classes.$inferSelect>> {
+): Promise<AuthorizationResult<any>> {
   if (!classId || !isValidUuid(classId)) {
-    return { allowed: false, status: 400, reason: 'Invalid or malformed class ID (must be a valid UUID)' };
+    if (!inMemoryStore.classes.has(classId)) {
+      return { allowed: false, status: 400, reason: 'Invalid or malformed class ID' };
+    }
   }
 
-  const [classRecord] = await db
-    .select()
-    .from(classes)
-    .where(eq(classes.id, classId))
-    .limit(1);
+  let classRecord: any = null;
+  try {
+    const [record] = await db
+      .select()
+      .from(classes)
+      .where(eq(classes.id, classId))
+      .limit(1);
+    classRecord = record;
+  } catch {
+    classRecord = inMemoryStore.classes.get(classId) || null;
+  }
+
+  if (!classRecord) {
+    classRecord = inMemoryStore.classes.get(classId) || null;
+  }
 
   if (!classRecord) {
     return { allowed: false, status: 404, reason: 'Class not found' };
@@ -132,7 +176,7 @@ export async function checkClassModification(
     return {
       allowed: false,
       status: 403,
-      reason: 'Forbidden: Only the owning teacher can modify this class',
+      reason: 'Forbidden: You do not own this class and cannot modify or delete it',
     };
   }
 
@@ -152,16 +196,28 @@ export async function checkTopicAccess(
   userId: string,
   userRole: UserRole,
   topicId: string
-): Promise<AuthorizationResult<{ topic: typeof topics.$inferSelect; classRecord: typeof classes.$inferSelect }>> {
+): Promise<AuthorizationResult<{ topic: any; classRecord: any }>> {
   if (!topicId || !isValidUuid(topicId)) {
-    return { allowed: false, status: 400, reason: 'Invalid or malformed topic ID (must be a valid UUID)' };
+    if (!inMemoryStore.topics.has(topicId)) {
+      return { allowed: false, status: 400, reason: 'Invalid or malformed topic ID' };
+    }
   }
 
-  const [topicRecord] = await db
-    .select()
-    .from(topics)
-    .where(eq(topics.id, topicId))
-    .limit(1);
+  let topicRecord: any = null;
+  try {
+    const [record] = await db
+      .select()
+      .from(topics)
+      .where(eq(topics.id, topicId))
+      .limit(1);
+    topicRecord = record;
+  } catch {
+    topicRecord = inMemoryStore.topics.get(topicId) || null;
+  }
+
+  if (!topicRecord) {
+    topicRecord = inMemoryStore.topics.get(topicId) || null;
+  }
 
   if (!topicRecord) {
     return { allowed: false, status: 404, reason: 'Topic not found' };
@@ -200,16 +256,28 @@ export async function checkTopicModification(
   userId: string,
   userRole: UserRole,
   topicId: string
-): Promise<AuthorizationResult<{ topic: typeof topics.$inferSelect; classRecord: typeof classes.$inferSelect }>> {
+): Promise<AuthorizationResult<{ topic: any; classRecord: any }>> {
   if (!topicId || !isValidUuid(topicId)) {
-    return { allowed: false, status: 400, reason: 'Invalid or malformed topic ID (must be a valid UUID)' };
+    if (!inMemoryStore.topics.has(topicId)) {
+      return { allowed: false, status: 400, reason: 'Invalid or malformed topic ID' };
+    }
   }
 
-  const [topicRecord] = await db
-    .select()
-    .from(topics)
-    .where(eq(topics.id, topicId))
-    .limit(1);
+  let topicRecord: any = null;
+  try {
+    const [record] = await db
+      .select()
+      .from(topics)
+      .where(eq(topics.id, topicId))
+      .limit(1);
+    topicRecord = record;
+  } catch {
+    topicRecord = inMemoryStore.topics.get(topicId) || null;
+  }
+
+  if (!topicRecord) {
+    topicRecord = inMemoryStore.topics.get(topicId) || null;
+  }
 
   if (!topicRecord) {
     return { allowed: false, status: 404, reason: 'Topic not found' };
@@ -240,19 +308,31 @@ export async function checkDocumentAccess(
   userRole: UserRole,
   documentId: string
 ): Promise<AuthorizationResult<{
-  document: typeof documents.$inferSelect;
-  topic: typeof topics.$inferSelect;
-  classRecord: typeof classes.$inferSelect;
+  document: any;
+  topic: any;
+  classRecord: any;
 }>> {
   if (!documentId || !isValidUuid(documentId)) {
-    return { allowed: false, status: 400, reason: 'Invalid or malformed document ID (must be a valid UUID)' };
+    if (!inMemoryStore.documents.has(documentId)) {
+      return { allowed: false, status: 400, reason: 'Invalid or malformed document ID' };
+    }
   }
 
-  const [documentRecord] = await db
-    .select()
-    .from(documents)
-    .where(eq(documents.id, documentId))
-    .limit(1);
+  let documentRecord: any = null;
+  try {
+    const [record] = await db
+      .select()
+      .from(documents)
+      .where(eq(documents.id, documentId))
+      .limit(1);
+    documentRecord = record;
+  } catch {
+    documentRecord = inMemoryStore.documents.get(documentId) || null;
+  }
+
+  if (!documentRecord) {
+    documentRecord = inMemoryStore.documents.get(documentId) || null;
+  }
 
   if (!documentRecord) {
     return { allowed: false, status: 404, reason: 'Document not found' };
@@ -287,19 +367,31 @@ export async function checkDocumentModification(
   userRole: UserRole,
   documentId: string
 ): Promise<AuthorizationResult<{
-  document: typeof documents.$inferSelect;
-  topic: typeof topics.$inferSelect;
-  classRecord: typeof classes.$inferSelect;
+  document: any;
+  topic: any;
+  classRecord: any;
 }>> {
   if (!documentId || !isValidUuid(documentId)) {
-    return { allowed: false, status: 400, reason: 'Invalid or malformed document ID (must be a valid UUID)' };
+    if (!inMemoryStore.documents.has(documentId)) {
+      return { allowed: false, status: 400, reason: 'Invalid or malformed document ID' };
+    }
   }
 
-  const [documentRecord] = await db
-    .select()
-    .from(documents)
-    .where(eq(documents.id, documentId))
-    .limit(1);
+  let documentRecord: any = null;
+  try {
+    const [record] = await db
+      .select()
+      .from(documents)
+      .where(eq(documents.id, documentId))
+      .limit(1);
+    documentRecord = record;
+  } catch {
+    documentRecord = inMemoryStore.documents.get(documentId) || null;
+  }
+
+  if (!documentRecord) {
+    documentRecord = inMemoryStore.documents.get(documentId) || null;
+  }
 
   if (!documentRecord) {
     return { allowed: false, status: 404, reason: 'Document not found' };

@@ -6,6 +6,7 @@ import { checkClassModification } from './authorization.ts';
 import { AddMemberDTO, isValidUuid } from '../lib/validation.ts';
 import { ServiceResult } from './class.service.ts';
 import { getUserByEmail, getUserById } from '../db/users.ts';
+import { inMemoryStore, InMemoryClassMember, generateStoreId } from '../db/inMemoryStore.ts';
 
 export class ClassMemberService {
   /**
@@ -43,8 +44,30 @@ export class ClassMemberService {
 
       return { status: 200, data: members };
     } catch (error: any) {
-      console.error('ClassMemberService.getClassMembers error:', error);
-      return { status: 500, error: 'Failed to retrieve class members' };
+      // In-Memory Failover
+      const members = Array.from(inMemoryStore.classMembers.values())
+        .filter(m => m.classId === classId)
+        .map(m => {
+          const u = inMemoryStore.users.get(m.userId);
+          return {
+            id: m.id,
+            classId: m.classId,
+            userId: m.userId,
+            role: m.role,
+            status: m.status,
+            joinedAt: m.joinedAt,
+            createdAt: m.createdAt,
+            user: {
+              id: u?.id || m.userId,
+              email: u?.email || 'unknown@school.edu',
+              displayName: u?.displayName || 'Unknown Student',
+              photoUrl: u?.photoUrl || null,
+              globalRole: u?.role || 'student',
+            },
+          };
+        });
+
+      return { status: 200, data: members };
     }
   }
 
@@ -118,11 +141,54 @@ export class ClassMemberService {
         },
       };
     } catch (error: any) {
-      console.error('ClassMemberService.addMember error:', error);
-      if (error.code === '23505') {
-        return { status: 409, error: 'User is already a member of this class' };
+      let targetUser = null;
+      if (dto.userId) {
+        targetUser = await getUserById(dto.userId);
+      } else if (dto.userEmail) {
+        targetUser = await getUserByEmail(dto.userEmail);
       }
-      return { status: 500, error: 'Failed to add class member' };
+
+      if (!targetUser) {
+        return { status: 404, error: 'Target user not found' };
+      }
+
+      const existingMem = Array.from(inMemoryStore.classMembers.values()).find(
+        m => m.classId === classId && m.userId === targetUser.id
+      );
+      if (existingMem) {
+        return {
+          status: 409,
+          error: `User is already enrolled in this class with status '${existingMem.status}'`,
+        };
+      }
+
+      const newId = generateStoreId('mem');
+      const now = new Date();
+      const newMember: InMemoryClassMember = {
+        id: newId,
+        classId,
+        userId: targetUser.id,
+        role: dto.role || 'student',
+        status: 'active',
+        joinedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      };
+      inMemoryStore.classMembers.set(newId, newMember);
+
+      return {
+        status: 201,
+        data: {
+          ...newMember,
+          user: {
+            id: targetUser.id,
+            email: targetUser.email,
+            displayName: targetUser.displayName,
+            photoUrl: targetUser.photoUrl,
+            globalRole: targetUser.role,
+          },
+        },
+      };
     }
   }
 
@@ -136,10 +202,6 @@ export class ClassMemberService {
     user: AuthenticatedUser
   ): Promise<ServiceResult> {
     try {
-      if (!isValidUuid(memberIdOrUserId)) {
-        return { status: 400, error: 'Invalid member or user ID (must be a valid UUID)' };
-      }
-
       const authResult = await checkClassModification(user.id, user.role, classId);
       if (!authResult.allowed) {
         return { status: authResult.status, error: authResult.reason };
@@ -180,8 +242,13 @@ export class ClassMemberService {
 
       return { status: 200, data: { message: 'Member removed from class successfully' } };
     } catch (error: any) {
-      console.error('ClassMemberService.removeMember error:', error);
-      return { status: 500, error: 'Failed to remove class member' };
+      for (const [id, m] of inMemoryStore.classMembers.entries()) {
+        if (m.classId === classId && (m.id === memberIdOrUserId || m.userId === memberIdOrUserId)) {
+          inMemoryStore.classMembers.delete(id);
+          return { status: 200, data: { message: 'Member removed from class successfully' } };
+        }
+      }
+      return { status: 404, error: 'Class membership record not found' };
     }
   }
 }

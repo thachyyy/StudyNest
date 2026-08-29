@@ -92,19 +92,7 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
-    // 2. If unauthenticated, clear data without triggering premature API calls or false errors
-    if (!currentUser) {
-      setClassesState({
-        data: [],
-        loading: false,
-        error: null,
-        status: null,
-      });
-      setSelectedClassId(null);
-      return;
-    }
-
-    // 3. Authenticated: Fetch classes with Bearer ID token
+    // 2. Fetch classes from PostgreSQL via /api/classes
     setClassesState(prev => ({ ...prev, loading: true, error: null, status: null }));
     try {
       const fetchedClasses = await classService.getClasses();
@@ -131,8 +119,29 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         error: message,
         status,
       });
+      setSelectedClassId(null);
+      setSelectedTopicId(null);
+      setTopicsState({ data: [], loading: false, error: null, status: null });
+      setSelectedDocumentId(null);
+      setDocumentsState({ data: [], loading: false, error: null, status: null });
     }
-  }, [authLoading, currentUser]);
+  }, [authLoading]);
+
+  const handleSetSelectedClassId = useCallback((newClassId: string | null) => {
+    setSelectedClassId(newClassId);
+    // Immediately clear dependent topic and document selections to prevent stale data flash
+    setSelectedTopicId(null);
+    setTopicsState({ data: [], loading: Boolean(newClassId), error: null, status: null });
+    setSelectedDocumentId(null);
+    setDocumentsState({ data: [], loading: false, error: null, status: null });
+  }, []);
+
+  const handleSetSelectedTopicId = useCallback((newTopicId: string | null) => {
+    setSelectedTopicId(newTopicId);
+    // Immediately clear dependent document selection and set loading state if new topic selected
+    setSelectedDocumentId(null);
+    setDocumentsState({ data: [], loading: Boolean(newTopicId), error: null, status: null });
+  }, []);
 
   // Sync classes when auth state or authoritative role changes
   useEffect(() => {
@@ -141,22 +150,12 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
-    if (!currentUser) {
-      setClassesState({ data: [], loading: false, error: null, status: null });
-      setTopicsState({ data: [], loading: false, error: null, status: null });
-      setDocumentsState({ data: [], loading: false, error: null, status: null });
-      setSelectedClassId(null);
-      setSelectedTopicId(null);
-      setSelectedDocumentId(null);
-      return;
-    }
-
     refreshClasses();
   }, [currentUser, authoritativeRole, authLoading, refreshClasses]);
 
   // 2. Fetch Topics for Selected Class (GET /api/classes/:classId/topics)
   const refreshTopics = useCallback(async () => {
-    if (authLoading || !currentUser || !selectedClassId) {
+    if (authLoading || !selectedClassId) {
       setTopicsState({ data: [], loading: false, error: null, status: null });
       setSelectedTopicId(null);
       return;
@@ -193,13 +192,13 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
       setSelectedTopicId(null);
     }
-  }, [authLoading, currentUser, selectedClassId]);
+  }, [authLoading, selectedClassId]);
 
   // Load topics whenever selectedClassId or auth changes
   useEffect(() => {
-    if (!authLoading && currentUser && selectedClassId) {
+    if (!authLoading && selectedClassId) {
       refreshTopics();
-    } else if (!currentUser || !selectedClassId) {
+    } else if (!selectedClassId) {
       setTopicsState({ data: [], loading: false, error: null, status: null });
       setSelectedTopicId(null);
     }
@@ -207,7 +206,7 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // 3. Fetch Documents for Selected Topic (GET /api/topics/:topicId/documents)
   const refreshDocuments = useCallback(async () => {
-    if (authLoading || !currentUser || !selectedTopicId) {
+    if (authLoading || !selectedTopicId) {
       setDocumentsState({ data: [], loading: false, error: null, status: null });
       setSelectedDocumentId(null);
       return;
@@ -240,13 +239,13 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
       setSelectedDocumentId(null);
     }
-  }, [authLoading, currentUser, selectedTopicId]);
+  }, [authLoading, selectedTopicId]);
 
   // Load documents whenever selectedTopicId or auth changes
   useEffect(() => {
-    if (!authLoading && currentUser && selectedTopicId) {
+    if (!authLoading && selectedTopicId) {
       refreshDocuments();
-    } else if (!currentUser || !selectedTopicId) {
+    } else if (!selectedTopicId) {
       setDocumentsState({ data: [], loading: false, error: null, status: null });
       setSelectedDocumentId(null);
     }
@@ -371,7 +370,7 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         classes,
         selectedClassId,
         selectedClass,
-        setSelectedClassId,
+        setSelectedClassId: handleSetSelectedClassId,
         refreshClasses,
         createClass,
         updateClass,
@@ -381,7 +380,7 @@ export const DomainProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         topics,
         selectedTopicId,
         selectedTopic,
-        setSelectedTopicId,
+        setSelectedTopicId: handleSetSelectedTopicId,
         refreshTopics,
         createTopic,
         updateTopic,

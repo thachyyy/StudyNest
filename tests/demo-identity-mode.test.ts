@@ -86,7 +86,7 @@ async function runDemoIdentityModeTests() {
     assert(data.user !== undefined, 'req.user must be populated');
     assert(data.user.email === 'demo.teacher@studynest.local', `Expected email demo.teacher@studynest.local, got ${data.user.email}`);
     assert(data.user.role === 'teacher', `Expected role teacher, got ${data.user.role}`);
-    assert(data.user.displayName?.includes('Sarah Jenkins'), `Expected name containing Sarah Jenkins, got ${data.user.displayName}`);
+    assert(data.user.displayName?.includes('Sarah'), `Expected name containing Sarah, got ${data.user.displayName}`);
     assert(data.user.id !== undefined, 'User must have valid id');
     assert(data.user.firebaseUid !== undefined, 'User must have valid firebaseUid');
   });

@@ -205,7 +205,7 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ onSelectDocume
         statusCode={documentsState.status}
         onRetry={refreshDocuments}
         isEmpty={!documentsState.loading && !documentsState.error && documents.length === 0}
-        emptyTitle="No Documents in this Topic"
+        emptyTitle="No documents yet"
         emptyDescription="Add lecture notes, reading excerpts, or reference metadata for students."
         emptyActionLabel="Add First Document"
         onEmptyAction={() => setIsCreateOpen(true)}
@@ -213,6 +213,14 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ onSelectDocume
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {documents.map((doc) => {
             const isSelected = selectedDocumentId === doc.id;
+            const formattedDate = doc.createdAt
+              ? new Date(doc.createdAt).toLocaleDateString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })
+              : null;
+
             return (
               <div
                 key={doc.id}
@@ -236,12 +244,12 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ onSelectDocume
                         <h4 className="text-xs font-bold text-slate-900 line-clamp-1">
                           {doc.title}
                         </h4>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.2 rounded font-semibold capitalize">
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-semibold capitalize">
                             {formatContentType(doc.contentType)}
                           </span>
-                          <span className="text-[10px] text-slate-400">
-                            {doc.fileSize ? `${doc.fileSize} chars` : 'Metadata only'}
+                          <span className="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
+                            ID: {doc.id.slice(0, 8)}...
                           </span>
                         </div>
                       </div>
@@ -269,13 +277,18 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ onSelectDocume
 
                 <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                      <span>{doc.fileSize ? `${doc.fileSize} bytes` : 'Metadata only'}</span>
+                      {formattedDate && <span>• {formattedDate}</span>}
+                    </div>
+
                     {doc.content && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           setViewingDoc(doc);
                         }}
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 cursor-pointer"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 cursor-pointer ml-1"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span>Read Content</span>

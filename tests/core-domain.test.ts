@@ -2,9 +2,11 @@ import express from 'express';
 import dotenv from 'dotenv';
 import { domainRouter } from '../src/routes/domain.ts';
 import { getUserByUid } from '../src/db/users.ts';
+import { inMemoryStore } from '../src/db/inMemoryStore.ts';
 
 dotenv.config();
 process.env.NODE_ENV = 'test';
+process.env.DEMO_MODE = 'false';
 
 // Build a standalone test express app mounting domainRouter
 const app = express();
@@ -67,7 +69,51 @@ async function runTests() {
     }
   }
 
-  // Pre-fetch seeded users from DB to ensure IDs
+  // Ensure test users are available in DB / memory
+  inMemoryStore.users.set('11111111-1111-4111-8111-111111111111', {
+    id: '11111111-1111-4111-8111-111111111111',
+    uid: 'firebase-uid-teacher-a',
+    email: 'teacher-a@test.local',
+    displayName: 'Teacher A',
+    photoUrl: null,
+    role: 'teacher',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  inMemoryStore.users.set('22222222-2222-4222-8222-222222222222', {
+    id: '22222222-2222-4222-8222-222222222222',
+    uid: 'firebase-uid-teacher-b',
+    email: 'teacher-b@test.local',
+    displayName: 'Teacher B',
+    photoUrl: null,
+    role: 'teacher',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  inMemoryStore.users.set('33333333-3333-4333-8333-333333333333', {
+    id: '33333333-3333-4333-8333-333333333333',
+    uid: 'firebase-uid-student-enrolled',
+    email: 'student-enrolled@test.local',
+    displayName: 'Student Enrolled',
+    photoUrl: null,
+    role: 'student',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  inMemoryStore.users.set('44444444-4444-4444-8444-444444444444', {
+    id: '44444444-4444-4444-8444-444444444444',
+    uid: 'firebase-uid-student-unenrolled',
+    email: 'student-unenrolled@test.local',
+    displayName: 'Student Unenrolled',
+    photoUrl: null,
+    role: 'student',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
   const teacherA = await getUserByUid('firebase-uid-teacher-a');
   const teacherB = await getUserByUid('firebase-uid-teacher-b');
   const studentEnrolled = await getUserByUid('firebase-uid-student-enrolled');

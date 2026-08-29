@@ -1,20 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { collection, onSnapshot, doc } from 'firebase/firestore';
 import {
   auth,
-  db,
-  testConnection,
   signInWithGoogle,
-  signInAsDemo,
   logOut,
-  seedInitialDataIfEmpty,
-  saveMaterialToFirestore,
-  saveStudentToFirestore,
-  saveConversationToFirestore,
-  saveQuizToFirestore,
-  handleFirestoreError,
-  OperationType
 } from '../lib/firebase';
 import { Material, Student, StudentConversation, Quiz, LearningAnalytics, ServerUser, UserRole } from '../types';
 import { apiClient } from '../services/apiClient';
@@ -58,7 +47,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [authLoading, setAuthLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
 
   const [materials, setMaterials] = useState<Material[]>(INITIAL_MATERIALS);
   const [students, setStudents] = useState<Student[]>(INITIAL_STUDENTS);
@@ -66,56 +55,60 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [quiz, setQuiz] = useState<Quiz>(INITIAL_QUIZ);
   const [analytics, setAnalytics] = useState<LearningAnalytics>(INITIAL_ANALYTICS);
 
-  // Fetch authoritative user profile from backend
+  // Fetch authoritative user profile from backend (PostgreSQL)
   const refreshServerUser = useCallback(async () => {
-    if (!auth.currentUser) {
-      setServerUser(null);
-      return;
-    }
     try {
       const data = await apiClient.get<{ success: boolean; user: ServerUser }>('/users/me');
       if (data?.user) {
         setServerUser(data.user);
+      } else {
+        setServerUser(null);
       }
     } catch (err) {
-      console.warn('Could not refresh server user:', err);
+      // If error occurs, set default demo user
+      setServerUser(prev => prev);
     }
   }, []);
 
-  // Initialize Auth & Connection
+  // Initialize Auth & backend session
   useEffect(() => {
     let isMounted = true;
 
     async function init() {
-      const ok = await testConnection();
-      if (isMounted) setIsConnected(ok);
-      await seedInitialDataIfEmpty();
+      // In demo mode, start with teacher role by default
+      apiClient.setDemoRole('teacher');
+      await refreshServerUser();
+      if (isMounted) {
+        setAuthLoading(false);
+        setIsConnected(true);
+      }
     }
     init();
 
+    // Firebase Auth state listener (used for production or when user signs in with Google)
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      if (isMounted) {
-        setCurrentUser(user);
-        setAuthLoading(false);
-        setIsLoggingIn(false);
+      if (!isMounted) return;
+      setCurrentUser(user);
+      setAuthLoading(false);
+      setIsLoggingIn(false);
 
-        if (!user) {
-          setServerUser(null);
-          return;
-        }
+      if (!user) {
+        // Fall back to backend demo user
+        await refreshServerUser();
+        return;
+      }
 
-        // Sync authenticated user to PostgreSQL database in backend
-        try {
-          const syncData = await apiClient.post<{ success: boolean; user: ServerUser }>('/users/sync', {
-            displayName: user.displayName,
-            photoUrl: user.photoURL,
-          });
-          if (syncData?.user && isMounted) {
-            setServerUser(syncData.user);
-          }
-        } catch (e) {
-          console.warn('Background PostgreSQL user sync notice:', e);
+      // Sync authenticated user to PostgreSQL database in backend
+      try {
+        const syncData = await apiClient.post<{ success: boolean; user: ServerUser }>('/users/sync', {
+          displayName: user.displayName,
+          photoUrl: user.photoURL,
+        });
+        if (syncData?.user && isMounted) {
+          setServerUser(syncData.user);
         }
+      } catch (e) {
+        console.warn('Background PostgreSQL user sync notice:', e);
       }
     });
 
@@ -123,88 +116,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       isMounted = false;
       unsubscribeAuth();
     };
-  }, []);
-
-  // Real-time Firestore Listeners with error handling callbacks
-  useEffect(() => {
-    // 1. Materials Collection Listener
-    const matPath = 'materials';
-    const unsubMaterials = onSnapshot(
-      collection(db, matPath),
-      (snapshot) => {
-        if (!snapshot.empty) {
-          const list: Material[] = [];
-          snapshot.forEach((docSnap) => {
-            list.push(docSnap.data() as Material);
-          });
-          setMaterials(list);
-        }
-      },
-      (error) => {
-        console.warn('Materials snapshot notice:', error);
-      }
-    );
-
-    // 2. Students Collection Listener
-    const stuPath = 'students';
-    const unsubStudents = onSnapshot(
-      collection(db, stuPath),
-      (snapshot) => {
-        if (!snapshot.empty) {
-          const list: Student[] = [];
-          snapshot.forEach((docSnap) => {
-            list.push(docSnap.data() as Student);
-          });
-          setStudents(list);
-        }
-      },
-      (error) => {
-        console.warn('Students snapshot notice:', error);
-      }
-    );
-
-    // 3. Conversations Collection Listener
-    const convPath = 'conversations';
-    const unsubConversations = onSnapshot(
-      collection(db, convPath),
-      (snapshot) => {
-        if (!snapshot.empty) {
-          const list: StudentConversation[] = [];
-          snapshot.forEach((docSnap) => {
-            list.push(docSnap.data() as StudentConversation);
-          });
-          setConversations(list);
-        }
-      },
-      (error) => {
-        console.warn('Conversations snapshot notice:', error);
-      }
-    );
-
-    // 4. Quiz Listener
-    const quizPath = 'quizzes';
-    const unsubQuizzes = onSnapshot(
-      collection(db, quizPath),
-      (snapshot) => {
-        if (!snapshot.empty) {
-          const docSnap = snapshot.docs[0];
-          if (docSnap) {
-            setQuiz(docSnap.data() as Quiz);
-          }
-        }
-      },
-      (error) => {
-        console.warn('Quizzes snapshot notice:', error);
-      }
-    );
-
-    return () => {
-      unsubMaterials();
-      unsubStudents();
-      unsubConversations();
-      unsubQuizzes();
-    };
-  }, []);
+  }, [refreshServerUser]);
 
   // Update analytics dynamically when students/conversations change
   useEffect(() => {
@@ -247,9 +159,27 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setIsLoggingIn(true);
     setAuthNotice(null);
     try {
-      await signInAsDemo(role);
+      // Switch demo identity via backend Demo Identity flow (no Firebase anonymous auth needed)
+      apiClient.setDemoRole(role);
+      
+      // Update optimistic serverUser profile
+      setServerUser({
+        id: `demo-${role}-id`,
+        uid: `demo-uid-${role}`,
+        email: role === 'teacher' ? 'demo.teacher@studynest.local' : 'an.minh@studynest.local',
+        displayName: role === 'teacher' ? 'Dr. Sarah Vance' : 'An Minh (Student)',
+        photoUrl: role === 'teacher'
+          ? 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=100&q=80'
+          : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80',
+        role,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // Synchronize with PostgreSQL /api/users/me
+      await refreshServerUser();
     } catch (err) {
-      console.warn('Demo sign in notice:', err);
+      console.warn('Demo identity switch notice:', err);
     } finally {
       setIsLoggingIn(false);
     }
@@ -258,6 +188,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const handleLogout = async () => {
     try {
       await logOut();
+      setCurrentUser(null);
+      setServerUser(null);
+      apiClient.setDemoRole(null);
       setAuthNotice(null);
     } catch (err) {
       console.warn('Sign-out notice:', err);
@@ -265,14 +198,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const handleAddMaterial = async (newMat: Material) => {
-    // Optimistic local update
     setMaterials(prev => [newMat, ...prev]);
-    await saveMaterialToFirestore(newMat);
   };
 
   const handleUpdateStudent = async (student: Student) => {
     setStudents(prev => prev.map(s => s.id === student.id ? student : s));
-    await saveStudentToFirestore(student);
   };
 
   const handleSaveConversation = async (conv: StudentConversation) => {
@@ -285,12 +215,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       return [conv, ...prev];
     });
-    await saveConversationToFirestore(conv);
   };
 
   const handleSaveQuiz = async (newQuiz: Quiz) => {
     setQuiz(newQuiz);
-    await saveQuizToFirestore(newQuiz);
   };
 
   return (
@@ -331,3 +259,4 @@ export function useFirebase() {
   }
   return context;
 }
+

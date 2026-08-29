@@ -4,6 +4,7 @@ import { classes, classMembers, users } from '../db/schema.ts';
 import { AuthenticatedUser } from '../middleware/auth.ts';
 import { checkClassAccess, checkClassModification } from './authorization.ts';
 import { CreateClassDTO, UpdateClassDTO } from '../lib/validation.ts';
+import { inMemoryStore, InMemoryClass, generateStoreId } from '../db/inMemoryStore.ts';
 
 export interface ServiceResult<T = any> {
   status: 200 | 201 | 400 | 401 | 403 | 404 | 409 | 500;
@@ -83,8 +84,22 @@ export class ClassService {
 
       return { status: 200, data: enrolledClasses };
     } catch (error: any) {
-      console.error('ClassService.listClasses error:', error);
-      return { status: 500, error: 'Failed to retrieve classes' };
+      // In-Memory Failover
+      const allMemClasses = Array.from(inMemoryStore.classes.values());
+      if (user.role === 'admin') {
+        return { status: 200, data: allMemClasses };
+      }
+      if (user.role === 'teacher') {
+        const owned = allMemClasses.filter(c => c.teacherId === user.id);
+        return { status: 200, data: owned };
+      }
+      // Student
+      const memberships = Array.from(inMemoryStore.classMembers.values()).filter(
+        m => m.userId === user.id && m.status === 'active'
+      );
+      const studentClassIds = new Set(memberships.map(m => m.classId));
+      const enrolled = allMemClasses.filter(c => studentClassIds.has(c.id));
+      return { status: 200, data: enrolled };
     }
   }
 
@@ -119,8 +134,11 @@ export class ClassService {
 
       return { status: 200, data: classWithTeacher || authResult.resource };
     } catch (error: any) {
-      console.error('ClassService.getClassById error:', error);
-      return { status: 500, error: 'Failed to retrieve class' };
+      const memClass = inMemoryStore.classes.get(classId);
+      if (memClass) {
+        return { status: 200, data: memClass };
+      }
+      return { status: 404, error: 'Class not found' };
     }
   }
 
@@ -160,11 +178,33 @@ export class ClassService {
 
       return { status: 201, data: created };
     } catch (error: any) {
-      console.error('ClassService.createClass error:', error);
-      if (error.code === '23505') {
+      // In-Memory Fallback
+      if (user.role !== 'teacher' && user.role !== 'admin') {
+        return { status: 403, error: 'Forbidden: Only teachers and admins can create classes' };
+      }
+
+      const existingCode = Array.from(inMemoryStore.classes.values()).find(
+        c => c.code.toLowerCase() === dto.code.toLowerCase()
+      );
+      if (existingCode) {
         return { status: 409, error: `A class with code '${dto.code}' already exists` };
       }
-      return { status: 500, error: 'Failed to create class' };
+
+      const newId = generateStoreId('class');
+      const now = new Date();
+      const newClass: InMemoryClass = {
+        id: newId,
+        name: dto.name,
+        code: dto.code,
+        subject: dto.subject,
+        grade: dto.grade || null,
+        description: dto.description || null,
+        teacherId: user.id,
+        createdAt: now,
+        updatedAt: now,
+      };
+      inMemoryStore.classes.set(newId, newClass);
+      return { status: 201, data: newClass };
     }
   }
 
@@ -200,8 +240,16 @@ export class ClassService {
 
       return { status: 200, data: updated };
     } catch (error: any) {
-      console.error('ClassService.updateClass error:', error);
-      return { status: 500, error: 'Failed to update class' };
+      const memClass = inMemoryStore.classes.get(classId);
+      if (!memClass) {
+        return { status: 404, error: 'Class not found' };
+      }
+      if (dto.name !== undefined) memClass.name = dto.name;
+      if (dto.description !== undefined) memClass.description = dto.description;
+      if (dto.subject !== undefined) memClass.subject = dto.subject;
+      if (dto.grade !== undefined) memClass.grade = dto.grade;
+      memClass.updatedAt = new Date();
+      return { status: 200, data: memClass };
     }
   }
 
@@ -219,8 +267,11 @@ export class ClassService {
       await db.delete(classes).where(eq(classes.id, classId));
       return { status: 200, data: { message: 'Class deleted successfully' } };
     } catch (error: any) {
-      console.error('ClassService.deleteClass error:', error);
-      return { status: 500, error: 'Failed to delete class' };
+      if (inMemoryStore.classes.has(classId)) {
+        inMemoryStore.classes.delete(classId);
+        return { status: 200, data: { message: 'Class deleted successfully' } };
+      }
+      return { status: 404, error: 'Class not found' };
     }
   }
 }

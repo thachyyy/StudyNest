@@ -11,7 +11,7 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "db:seed": "tsx src/db/seed.ts",
-    "test": "tsx tests/demo-seed.test.ts && tsx tests/demo-identity-mode.test.ts && tsx tests/demo-teacher-class-flow.test.ts && tsx tests/auth-flow.test.ts && tsx tests/frontend-services.test.ts"
+    "test": "tsx tests/demo-seed.test.ts && tsx tests/demo-identity-mode.test.ts && tsx tests/demo-teacher-class-flow.test.ts && tsx tests/core-domain.test.ts && tsx tests/auth-flow.test.ts && tsx tests/frontend-services.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
